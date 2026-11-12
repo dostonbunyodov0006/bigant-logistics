@@ -1,0 +1,1106 @@
+{
+"regions": [
+{
+"code": "1703",
+"name": "Andijon viloyati",
+"is_city": false
+},
+{
+"code": "1706",
+"name": "Buxoro viloyati",
+"is_city": false
+},
+{
+"code": "1708",
+"name": "Jizzax viloyati",
+"is_city": false
+},
+{
+"code": "1710",
+"name": "Qashqadaryo viloyati",
+"is_city": false
+},
+{
+"code": "1712",
+"name": "Navoiy viloyati",
+"is_city": false
+},
+{
+"code": "1714",
+"name": "Namangan viloyati",
+"is_city": false
+},
+{
+"code": "1718",
+"name": "Samarqand viloyati",
+"is_city": false
+},
+{
+"code": "1722",
+"name": "Surxondaryo viloyati",
+"is_city": false
+},
+{
+"code": "1724",
+"name": "Sirdaryo viloyati",
+"is_city": false
+},
+{
+"code": "1726",
+"name": "Toshkent shahri",
+"is_city": true
+},
+{
+"code": "1727",
+"name": "Toshkent viloyati",
+"is_city": true
+},
+{
+"code": "1730",
+"name": "Farg‘ona viloyati",
+"is_city": false
+},
+{
+"code": "1733",
+"name": "Xorazm viloyati",
+"is_city": false
+},
+{
+"code": "1735",
+"name": "Qoraqalpog‘iston Respublikasi",
+"is_city": false
+}
+],
+"districts": [
+{
+"code": "1703202",
+"name": "Oltinko‘l tumani",
+"region_code": "1703"
+},
+{
+"code": "1703203",
+"name": "Andijon tumani",
+"region_code": "1703"
+},
+{
+"code": "1703206",
+"name": "Baliqchi tumani",
+"region_code": "1703"
+},
+{
+"code": "1703209",
+"name": "Bo‘ston tumani",
+"region_code": "1703"
+},
+{
+"code": "1703210",
+"name": "Buloqboshi tumani",
+"region_code": "1703"
+},
+{
+"code": "1703211",
+"name": "Jalaquduq tumani",
+"region_code": "1703"
+},
+{
+"code": "1703214",
+"name": "Izboskan tumani",
+"region_code": "1703"
+},
+{
+"code": "1703217",
+"name": "Ulug‘nor tumani",
+"region_code": "1703"
+},
+{
+"code": "1703220",
+"name": "Qo‘rg‘ontepa tumani",
+"region_code": "1703"
+},
+{
+"code": "1703224",
+"name": "Asaka tumani",
+"region_code": "1703"
+},
+{
+"code": "1703227",
+"name": "Marxamat tumani",
+"region_code": "1703"
+},
+{
+"code": "1703230",
+"name": "Shaxrixon tumani",
+"region_code": "1703"
+},
+{
+"code": "1703232",
+"name": "Paxtaobod tumani",
+"region_code": "1703"
+},
+{
+"code": "1703236",
+"name": "Xo‘jaobod tumani",
+"region_code": "1703"
+},
+{
+"code": "1703401",
+"name": "Andijon",
+"region_code": "1703"
+},
+{
+"code": "1703408",
+"name": "Xonobod",
+"region_code": "1703"
+},
+{
+"code": "1706204",
+"name": "Olot tumani",
+"region_code": "1706"
+},
+{
+"code": "1706207",
+"name": "Buxoro tumani",
+"region_code": "1706"
+},
+{
+"code": "1706212",
+"name": "Vobkent tumani",
+"region_code": "1706"
+},
+{
+"code": "1706215",
+"name": "G‘ijduvon tumani",
+"region_code": "1706"
+},
+{
+"code": "1706219",
+"name": "Kogon tumani",
+"region_code": "1706"
+},
+{
+"code": "1706230",
+"name": "Qorako‘l tumani",
+"region_code": "1706"
+},
+{
+"code": "1706232",
+"name": "Qorovulbozor tumani",
+"region_code": "1706"
+},
+{
+"code": "1706240",
+"name": "Peshku tumani",
+"region_code": "1706"
+},
+{
+"code": "1706242",
+"name": "Romitan tumani",
+"region_code": "1706"
+},
+{
+"code": "1706246",
+"name": "Jondor tumani",
+"region_code": "1706"
+},
+{
+"code": "1706258",
+"name": "Shofirkon tumani",
+"region_code": "1706"
+},
+{
+"code": "1706401",
+"name": "Buxoro",
+"region_code": "1706"
+},
+{
+"code": "1706403",
+"name": "Kogon",
+"region_code": "1706"
+},
+{
+"code": "1708201",
+"name": "Arnasoy tumani",
+"region_code": "1708"
+},
+{
+"code": "1708204",
+"name": "Baxmal tumani",
+"region_code": "1708"
+},
+{
+"code": "1708209",
+"name": "G‘allaorol tumani",
+"region_code": "1708"
+},
+{
+"code": "1708212",
+"name": "Sharof Rashidov tumani",
+"region_code": "1708"
+},
+{
+"code": "1708215",
+"name": "Do‘stlik tumani",
+"region_code": "1708"
+},
+{
+"code": "1708218",
+"name": "Zomin tumani",
+"region_code": "1708"
+},
+{
+"code": "1708220",
+"name": "Zarbdor tumani",
+"region_code": "1708"
+},
+{
+"code": "1708223",
+"name": "Mirzacho‘l tumani",
+"region_code": "1708"
+},
+{
+"code": "1708225",
+"name": "Zafarobod tumani",
+"region_code": "1708"
+},
+{
+"code": "1708228",
+"name": "Paxtakor tumani",
+"region_code": "1708"
+},
+{
+"code": "1708235",
+"name": "Forish tumani",
+"region_code": "1708"
+},
+{
+"code": "1708237",
+"name": "Yangiobod tumani",
+"region_code": "1708"
+},
+{
+"code": "1708401",
+"name": "Jizzax",
+"region_code": "1708"
+},
+{
+"code": "1710207",
+"name": "G‘uzor tumani",
+"region_code": "1710"
+},
+{
+"code": "1710212",
+"name": "Dehqonobod tumani",
+"region_code": "1710"
+},
+{
+"code": "1710220",
+"name": "Qamashi tumani",
+"region_code": "1710"
+},
+{
+"code": "1710224",
+"name": "Qarshi tumani",
+"region_code": "1710"
+},
+{
+"code": "1710229",
+"name": "Koson tumani",
+"region_code": "1710"
+},
+{
+"code": "1710232",
+"name": "Kitob tumani",
+"region_code": "1710"
+},
+{
+"code": "1710233",
+"name": "Mirishkor tumani",
+"region_code": "1710"
+},
+{
+"code": "1710234",
+"name": "Muborak tumani",
+"region_code": "1710"
+},
+{
+"code": "1710235",
+"name": "Nishon tumani",
+"region_code": "1710"
+},
+{
+"code": "1710237",
+"name": "Kasbi tumani",
+"region_code": "1710"
+},
+{
+"code": "1710240",
+"name": "Ko‘kdala tumani",
+"region_code": "1710"
+},
+{
+"code": "1710242",
+"name": "Chiroqchi tumani",
+"region_code": "1710"
+},
+{
+"code": "1710245",
+"name": "Shahrisabz tumani",
+"region_code": "1710"
+},
+{
+"code": "1710250",
+"name": "Yakkabog‘ tumani",
+"region_code": "1710"
+},
+{
+"code": "1710401",
+"name": "Qarshi",
+"region_code": "1710"
+},
+{
+"code": "1710405",
+"name": "Shahrisabz",
+"region_code": "1710"
+},
+{
+"code": "1712211",
+"name": "Konimex tumani",
+"region_code": "1712"
+},
+{
+"code": "1712216",
+"name": "Qiziltepa tumani",
+"region_code": "1712"
+},
+{
+"code": "1712230",
+"name": "Navbahor tumani",
+"region_code": "1712"
+},
+{
+"code": "1712234",
+"name": "Karmana tumani",
+"region_code": "1712"
+},
+{
+"code": "1712238",
+"name": "Nurota tumani",
+"region_code": "1712"
+},
+{
+"code": "1712248",
+"name": "Uchquduq tumani",
+"region_code": "1712"
+},
+{
+"code": "1712251",
+"name": "Xatirchi tumani",
+"region_code": "1712"
+},
+{
+"code": "1712244",
+"name": "Tomdi tumani",
+"region_code": "1712"
+},
+{
+"code": "1712401",
+"name": "Navoiy",
+"region_code": "1712"
+},
+{
+"code": "1712408",
+"name": "Zarafshon",
+"region_code": "1712"
+},
+{
+"code": "1712412",
+"name": "G‘ozg‘on",
+"region_code": "1712"
+},
+{
+"code": "1714204",
+"name": "Mingbuloq tumani",
+"region_code": "1714"
+},
+{
+"code": "1714207",
+"name": "Kosonsoy tumani",
+"region_code": "1714"
+},
+{
+"code": "1714212",
+"name": "Namangan tumani",
+"region_code": "1714"
+},
+{
+"code": "1714216",
+"name": "Norin tumani",
+"region_code": "1714"
+},
+{
+"code": "1714219",
+"name": "Pop tumani",
+"region_code": "1714"
+},
+{
+"code": "1714224",
+"name": "To‘raqo‘rg‘on tumani",
+"region_code": "1714"
+},
+{
+"code": "1714229",
+"name": "Uychi tumani",
+"region_code": "1714"
+},
+{
+"code": "1714234",
+"name": "Uchqo‘rg‘on tumani",
+"region_code": "1714"
+},
+{
+"code": "1714236",
+"name": "Chortoq tumani",
+"region_code": "1714"
+},
+{
+"code": "1714237",
+"name": "Chust tumani",
+"region_code": "1714"
+},
+{
+"code": "1714242",
+"name": "Yangiqo‘rg‘on tumani",
+"region_code": "1714"
+},
+{
+"code": "1714401",
+"name": "Namangan",
+"region_code": "1714"
+},
+{
+"code": "1718203",
+"name": "Oqdaryo tumani",
+"region_code": "1718"
+},
+{
+"code": "1718206",
+"name": "Bulung‘ur tumani",
+"region_code": "1718"
+},
+{
+"code": "1718209",
+"name": "Jomboy tumani",
+"region_code": "1718"
+},
+{
+"code": "1718212",
+"name": "Ishtixon tumani",
+"region_code": "1718"
+},
+{
+"code": "1718215",
+"name": "Kattaqo‘rg‘on tumani",
+"region_code": "1718"
+},
+{
+"code": "1718216",
+"name": "Qo‘shrabot tumani",
+"region_code": "1718"
+},
+{
+"code": "1718218",
+"name": "Narpay tumani",
+"region_code": "1718"
+},
+{
+"code": "1718224",
+"name": "Payariq tumani",
+"region_code": "1718"
+},
+{
+"code": "1718227",
+"name": "Pastdarg‘om tumani",
+"region_code": "1718"
+},
+{
+"code": "1718230",
+"name": "Paxtachi tumani",
+"region_code": "1718"
+},
+{
+"code": "1718233",
+"name": "Samarqand tumani",
+"region_code": "1718"
+},
+{
+"code": "1718235",
+"name": "Nurobod tumani",
+"region_code": "1718"
+},
+{
+"code": "1718236",
+"name": "Urgut tumani",
+"region_code": "1718"
+},
+{
+"code": "1718238",
+"name": "Tayloq tumani",
+"region_code": "1718"
+},
+{
+"code": "1718401",
+"name": "Samarqand",
+"region_code": "1718"
+},
+{
+"code": "1718406",
+"name": "Kattaqo‘rg‘on",
+"region_code": "1718"
+},
+{
+"code": "1722201",
+"name": "Oltinsoy tumani",
+"region_code": "1722"
+},
+{
+"code": "1722202",
+"name": "Angor tumani",
+"region_code": "1722"
+},
+{
+"code": "1722203",
+"name": "Bandixon tumani",
+"region_code": "1722"
+},
+{
+"code": "1722204",
+"name": "Boysun tumani",
+"region_code": "1722"
+},
+{
+"code": "1722207",
+"name": "Muzrabot tumani",
+"region_code": "1722"
+},
+{
+"code": "1722210",
+"name": "Denov tumani",
+"region_code": "1722"
+},
+{
+"code": "1722212",
+"name": "Jarqo‘rg‘on tumani",
+"region_code": "1722"
+},
+{
+"code": "1722214",
+"name": "Qumqo‘rg‘on tumani",
+"region_code": "1722"
+},
+{
+"code": "1722215",
+"name": "Qiziriq tumani",
+"region_code": "1722"
+},
+{
+"code": "1722217",
+"name": "Sariosiyo tumani",
+"region_code": "1722"
+},
+{
+"code": "1722220",
+"name": "Termiz tumani",
+"region_code": "1722"
+},
+{
+"code": "1722221",
+"name": "Uzun tumani",
+"region_code": "1722"
+},
+{
+"code": "1722223",
+"name": "Sherobod tumani",
+"region_code": "1722"
+},
+{
+"code": "1722226",
+"name": "Sho‘rchi tumani",
+"region_code": "1722"
+},
+{
+"code": "1722401",
+"name": "Termiz",
+"region_code": "1722"
+},
+{
+"code": "1724206",
+"name": "Oqoltin tumani",
+"region_code": "1724"
+},
+{
+"code": "1724212",
+"name": "Boyovut tumani",
+"region_code": "1724"
+},
+{
+"code": "1724216",
+"name": "Sayxunobod tumani",
+"region_code": "1724"
+},
+{
+"code": "1724220",
+"name": "Guliston tumani",
+"region_code": "1724"
+},
+{
+"code": "1724226",
+"name": "Sardoba tumani",
+"region_code": "1724"
+},
+{
+"code": "1724228",
+"name": "Mirzaobod tumani",
+"region_code": "1724"
+},
+{
+"code": "1724231",
+"name": "Sirdaryo tumani",
+"region_code": "1724"
+},
+{
+"code": "1724235",
+"name": "Xovos tumani",
+"region_code": "1724"
+},
+{
+"code": "1724401",
+"name": "Guliston",
+"region_code": "1724"
+},
+{
+"code": "1724410",
+"name": "Shirin",
+"region_code": "1724"
+},
+{
+"code": "1724413",
+"name": "Yangiyer",
+"region_code": "1724"
+},
+{
+"code": "1726262",
+"name": "Uchtepa tumani",
+"region_code": "1726"
+},
+{
+"code": "1726264",
+"name": "Bektemir tumani",
+"region_code": "1726"
+},
+{
+"code": "1726266",
+"name": "Yunusobod tumani",
+"region_code": "1726"
+},
+{
+"code": "1726269",
+"name": "Mirzo Ulug‘bek tumani",
+"region_code": "1726"
+},
+{
+"code": "1726273",
+"name": "Mirobod tumani",
+"region_code": "1726"
+},
+{
+"code": "1726277",
+"name": "Shayxontoxur tumani",
+"region_code": "1726"
+},
+{
+"code": "1726280",
+"name": "Olmazor tumani",
+"region_code": "1726"
+},
+{
+"code": "1726283",
+"name": "Sirg‘ali tumani",
+"region_code": "1726"
+},
+{
+"code": "1726287",
+"name": "Yakkasaroy tumani",
+"region_code": "1726"
+},
+{
+"code": "1726290",
+"name": "Yashnobod tumani",
+"region_code": "1726"
+},
+{
+"code": "1726292",
+"name": "Yangihayot tumani",
+"region_code": "1726"
+},
+{
+"code": "1726294",
+"name": "Chilonzor tumani",
+"region_code": "1726"
+},
+{
+"code": "1727206",
+"name": "Oqqo‘rg‘on tumani",
+"region_code": "1727"
+},
+{
+"code": "1727212",
+"name": "Ohangaron tumani",
+"region_code": "1727"
+},
+{
+"code": "1727220",
+"name": "Bekobod tumani",
+"region_code": "1727"
+},
+{
+"code": "1727224",
+"name": "Bo‘stonliq tumani",
+"region_code": "1727"
+},
+{
+"code": "1727228",
+"name": "Bo‘ka tumani",
+"region_code": "1727"
+},
+{
+"code": "1727233",
+"name": "Quyichirchiq tumani",
+"region_code": "1727"
+},
+{
+"code": "1727237",
+"name": "Zangiota tumani",
+"region_code": "1727"
+},
+{
+"code": "1727239",
+"name": "Yuqorichirchiq tumani",
+"region_code": "1727"
+},
+{
+"code": "1727248",
+"name": "Qibray tumani",
+"region_code": "1727"
+},
+{
+"code": "1727249",
+"name": "Parkent tumani",
+"region_code": "1727"
+},
+{
+"code": "1727250",
+"name": "Pskent tumani",
+"region_code": "1727"
+},
+{
+"code": "1727253",
+"name": "O‘rtachirchiq tumani",
+"region_code": "1727"
+},
+{
+"code": "1727256",
+"name": "Chinoz tumani",
+"region_code": "1727"
+},
+{
+"code": "1727259",
+"name": "Yangiyo‘l tumani",
+"region_code": "1727"
+},
+{
+"code": "1727265",
+"name": "Toshkent tumani",
+"region_code": "1727"
+},
+{
+"code": "1727401",
+"name": "Nurafshon",
+"region_code": "1727"
+},
+{
+"code": "1727404",
+"name": "Olmaliq",
+"region_code": "1727"
+},
+{
+"code": "1727407",
+"name": "Angren",
+"region_code": "1727"
+},
+{
+"code": "1727413",
+"name": "Bekobod",
+"region_code": "1727"
+},
+{
+"code": "1727415",
+"name": "Ohangaron",
+"region_code": "1727"
+},
+{
+"code": "1727419",
+"name": "Chirchiq",
+"region_code": "1727"
+},
+{
+"code": "1727424",
+"name": "Yangiyo‘l",
+"region_code": "1727"
+},
+{
+"code": "1730203",
+"name": "Oltiariq tumani",
+"region_code": "1730"
+},
+{
+"code": "1730206",
+"name": "Qo‘shtepa tumani",
+"region_code": "1730"
+},
+{
+"code": "1730209",
+"name": "Bog‘dod tumani",
+"region_code": "1730"
+},
+{
+"code": "1730212",
+"name": "Buvayda tumani",
+"region_code": "1730"
+},
+{
+"code": "1730215",
+"name": "Beshariq tumani",
+"region_code": "1730"
+},
+{
+"code": "1730218",
+"name": "Quva tumani",
+"region_code": "1730"
+},
+{
+"code": "1730221",
+"name": "Uchko‘prik tumani",
+"region_code": "1730"
+},
+{
+"code": "1730224",
+"name": "Rishton tumani",
+"region_code": "1730"
+},
+{
+"code": "1730226",
+"name": "So‘x tumani",
+"region_code": "1730"
+},
+{
+"code": "1730227",
+"name": "Toshloq tumani",
+"region_code": "1730"
+},
+{
+"code": "1730230",
+"name": "O‘zbekiston tumani",
+"region_code": "1730"
+},
+{
+"code": "1730233",
+"name": "Farg‘ona tumani",
+"region_code": "1730"
+},
+{
+"code": "1730236",
+"name": "Dang‘ara tumani",
+"region_code": "1730"
+},
+{
+"code": "1730238",
+"name": "Furqat tumani",
+"region_code": "1730"
+},
+{
+"code": "1730242",
+"name": "Yozyovon tumani",
+"region_code": "1730"
+},
+{
+"code": "1730401",
+"name": "Farg‘ona",
+"region_code": "1730"
+},
+{
+"code": "1730405",
+"name": "Qo‘qon",
+"region_code": "1730"
+},
+{
+"code": "1730408",
+"name": "Quvasoy",
+"region_code": "1730"
+},
+{
+"code": "1730412",
+"name": "Marg‘ilon",
+"region_code": "1730"
+},
+{
+"code": "1733204",
+"name": "Bog‘ot tumani",
+"region_code": "1733"
+},
+{
+"code": "1733208",
+"name": "Gurlan tumani",
+"region_code": "1733"
+},
+{
+"code": "1733212",
+"name": "Qo‘shko‘pir tumani",
+"region_code": "1733"
+},
+{
+"code": "1733217",
+"name": "Urganch tumani",
+"region_code": "1733"
+},
+{
+"code": "1733220",
+"name": "Xazorasp tumani",
+"region_code": "1733"
+},
+{
+"code": "1733221",
+"name": "Tuproqqal’a tumani",
+"region_code": "1733"
+},
+{
+"code": "1733223",
+"name": "Xonqa tumani",
+"region_code": "1733"
+},
+{
+"code": "1733226",
+"name": "Xiva tumani",
+"region_code": "1733"
+},
+{
+"code": "1733230",
+"name": "Shovot tumani",
+"region_code": "1733"
+},
+{
+"code": "1733233",
+"name": "Yangiariq tumani",
+"region_code": "1733"
+},
+{
+"code": "1733236",
+"name": "Yangibozor tumani",
+"region_code": "1733"
+},
+{
+"code": "1733401",
+"name": "Urganch",
+"region_code": "1733"
+},
+{
+"code": "1733406",
+"name": "Xiva",
+"region_code": "1733"
+},
+{
+"code": "1735204",
+"name": "Amudaryo tumani",
+"region_code": "1735"
+},
+{
+"code": "1735207",
+"name": "Beruniy tumani",
+"region_code": "1735"
+},
+{
+"code": "1735209",
+"name": "Bo‘zatov tumani",
+"region_code": "1735"
+},
+{
+"code": "1735211",
+"name": "Qorao‘zak tumani",
+"region_code": "1735"
+},
+{
+"code": "1735212",
+"name": "Kegeyli tumani",
+"region_code": "1735"
+},
+{
+"code": "1735215",
+"name": "Qo‘ng‘irot tumani",
+"region_code": "1735"
+},
+{
+"code": "1735218",
+"name": "Qanliko‘l tumani",
+"region_code": "1735"
+},
+{
+"code": "1735222",
+"name": "Mo‘ynoq tumani",
+"region_code": "1735"
+},
+{
+"code": "1735225",
+"name": "Nukus tumani",
+"region_code": "1735"
+},
+{
+"code": "1735228",
+"name": "Taxiatosh tumani",
+"region_code": "1735"
+},
+{
+"code": "1735230",
+"name": "Taxtako‘pir tumani",
+"region_code": "1735"
+},
+{
+"code": "1735233",
+"name": "To‘rtko‘l tumani",
+"region_code": "1735"
+},
+{
+"code": "1735236",
+"name": "Xo‘jayli tumani",
+"region_code": "1735"
+},
+{
+"code": "1735240",
+"name": "Chimboy tumani",
+"region_code": "1735"
+},
+{
+"code": "1735243",
+"name": "Shumanay tumani",
+"region_code": "1735"
+},
+{
+"code": "1735250",
+"name": "Ellikkala tumani",
+"region_code": "1735"
+},
+{
+"code": "1735401",
+"name": "Nukus",
+"region_code": "1735"
+}
+]
+}

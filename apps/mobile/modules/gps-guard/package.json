@@ -1,0 +1,6 @@
+{
+  "name": "gps-guard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BIGANT: the red GPS screen over the phone when GPS is turned off on shift"
+}

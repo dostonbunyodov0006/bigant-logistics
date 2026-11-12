@@ -1,0 +1,127 @@
+/* Omborchi (owner, 05.11.2026): the mini app's look, kept under .omb so
+   nothing here touches the rest of the site. */
+.omb {
+  --bg: #141311; --surf: #1E1C19; --ink: #F4F2ED; --muted: #9A958B; --line: #2B2825; --soft: #282521; --off: #3A3732;
+  --or: #F2751A; --ors: #3B2415; --gr: #5CC24A; --grs: #1D3320; --rd: #F06A52; --rds: #3C1F1B; --amb: #E0A53A; --ambs: #3A2E14;
+  --shadow: none; --cb: 1px solid var(--line); --over: rgba(0, 0, 0, .55);
+  min-height: 100vh; background: var(--bg); color: var(--ink);
+  font-family: 'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+/* Telegram's theme, not the computer's: dark unless Telegram says light. */
+.omb.light {
+    --bg: #F7F6F3; --surf: #FFFFFF; --ink: #191815; --muted: #8A867D; --line: #ECE9E3; --soft: #F1EFEA; --off: #DAD6CE;
+    --or: #EA6A0A; --ors: #FDEFE3; --gr: #43A832; --grs: #E6F5E1; --rd: #D2452C; --rds: #FBE4DF; --amb: #C2841D; --ambs: #FBF1DB;
+    --shadow: 0 1px 2px rgba(25, 24, 21, .04), 0 6px 20px rgba(25, 24, 21, .05); --cb: 1px solid transparent; --over: rgba(25, 24, 21, .35);
+}
+.omb * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.omb button, .omb input, .omb textarea { font-family: inherit; }
+.omb button { cursor: pointer; }
+.omb .top { display: flex; align-items: center; gap: 9px; padding: 16px 20px 12px; }
+.omb .top h1 { font-size: 22px; font-weight: 700; letter-spacing: -.3px; margin: 0; }
+.omb .top .sub { font-size: 13px; color: var(--muted); }
+.omb .body { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 18px; max-width: 640px; margin: 0 auto; }
+.omb .card { background: var(--surf); border-radius: 20px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; border: var(--cb); box-shadow: var(--shadow); }
+.omb .chip { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 14px; background: var(--soft); color: var(--ink); font-size: 12px; font-weight: 600; white-space: nowrap; border: 0; }
+.omb .chip.or { background: var(--ors); color: var(--or); }
+.omb .chip.gr { background: var(--grs); color: var(--gr); }
+.omb .chip.amb { background: var(--ambs); color: var(--amb); }
+.omb .chip.rd { background: var(--rds); color: var(--rd); }
+.omb .chip.vi { background: rgba(139, 99, 224, .16); color: #9A78EA; }
+.omb .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.omb .btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 16px; border-radius: 14px; font-size: 15px; font-weight: 600; border: 0; width: 100%; color: #fff; background: var(--or); }
+.omb .btn.soft { background: var(--soft); color: var(--ink); }
+.omb .btn.green { background: var(--gr); }
+.omb .btn:disabled { opacity: .45; cursor: default; }
+.omb .sect { padding: 6px 4px 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+.omb .list { padding: 4px 18px; gap: 0; }
+.omb .list > * + * { border-top: 1px solid var(--line); }
+.omb .lrow { display: flex; gap: 12px; align-items: center; padding: 11px 0; width: 100%; background: none; border: 0; color: inherit; text-align: left; }
+.omb .lrow .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.omb .lrow .t { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.omb .lrow .s { font-size: 12px; color: var(--muted); }
+.omb .lrow .chev { color: var(--muted); display: flex; }
+.omb .icav { position: relative; width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.omb .icav.or { background: var(--ors); color: var(--or); }
+.omb .icav.gr { background: var(--grs); color: var(--gr); }
+.omb .icav .nuqta { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: #2f80ed; border: 2px solid var(--bg); }
+.omb .note { display: flex; gap: 10px; align-items: center; padding: 11px 14px; border-radius: 14px; font-size: 13px; line-height: 1.4; background: var(--soft); color: var(--muted); }
+.omb .note.rd { background: var(--rds); color: var(--rd); }
+.omb .note.gr { background: var(--grs); color: var(--gr); }
+.omb .muted { color: var(--muted); }
+.omb .field { display: flex; flex-direction: column; gap: 6px; position: relative; }
+.omb .field label, .omb .field .lb { font-size: 12px; font-weight: 600; color: var(--muted); }
+.omb .field input, .omb .field textarea { min-height: 48px; padding: 12px 14px; background: var(--soft); border-radius: 14px; border: 1px solid transparent; color: var(--ink); font-size: 16px; width: 100%; outline: none; }
+.omb .field input:focus, .omb .field textarea:focus { border-color: var(--or); }
+.omb .field textarea { min-height: 90px; resize: vertical; line-height: 1.4; }
+.omb .bosh { border-color: var(--rd) !important; }
+.omb .rowbtn { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--soft); border-radius: 14px; border: 0; color: var(--ink); width: 100%; text-align: left; font-size: 15px; }
+.omb .spin { width: 28px; height: 28px; border: 3px solid var(--soft); border-top-color: var(--or); border-radius: 50%; animation: omb-sp .9s linear infinite; margin: 30px auto; }
+@keyframes omb-sp { to { transform: rotate(360deg); } }
+.omb .overlay { position: fixed; inset: 0; background: var(--over); display: flex; align-items: flex-end; z-index: 30; }
+.omb .sheet { background: var(--surf); border-radius: 24px 24px 0 0; padding: 14px 20px 26px; width: 100%; display: flex; flex-direction: column; gap: 12px; max-height: 88vh; overflow: auto; }
+.omb .sheet .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--off); align-self: center; flex-shrink: 0; }
+.omb .sheet h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.omb .toast { position: fixed; left: 20px; right: 20px; bottom: 24px; padding: 12px 16px; border-radius: 14px; background: var(--grs); color: var(--gr); font-size: 14px; font-weight: 600; text-align: center; z-index: 40; }
+.omb .toast.rd { background: var(--rds); color: var(--rd); }
+.omb .vz-kv { display: flex; flex-direction: column; background: var(--soft); border-radius: 14px; padding: 2px 14px; }
+.omb .vz-kv > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; }
+.omb .vz-kv > div + div { border-top: 1px solid var(--line); }
+.omb .vz-kv span { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+.omb .vz-kv b { font-weight: 600; font-size: 14px; text-align: right; }
+.omb .vz-h { font-size: 14px; font-weight: 800; }
+.omb .vz-h.or { color: var(--or); border-top: 1px solid var(--line); padding-top: 12px; }
+.omb .vz-nom { font-size: 17px; font-weight: 700; line-height: 1.25; }
+.omb .vz-pick { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 10px 14px; border-radius: 14px; border: 1.5px solid transparent; background: var(--soft); color: var(--ink); text-align: left; font-size: 15px; font-weight: 600; }
+.omb .vz-pick > span { flex: 1; }
+.omb .vz-pick .ph { color: var(--muted); font-weight: 500; }
+.omb .vz-hol { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border-radius: 16px; border: 1.5px solid transparent; }
+.omb .vz-hol.bosh { padding: 5px; }
+.omb .vz-hol button { height: 48px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surf); color: var(--ink); font-weight: 700; font-size: 15px; }
+.omb .vz-hol .gr.on { background: var(--grs); color: var(--gr); border-color: var(--gr); }
+.omb .vz-hol .rd.on { background: var(--rds); color: var(--rd); border-color: var(--rd); }
+.omb .vz-ayb { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1.5px dashed var(--line); font-size: 15px; font-weight: 600; }
+.omb .vz-ayb .l { color: var(--muted); font-weight: 500; }
+.omb .vz-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.omb .vz-slot { position: relative; height: 112px; border-radius: 14px; border: 1.5px dashed var(--off); background: var(--soft) center / cover no-repeat; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; text-align: center; padding: 8px; }
+.omb .vz-slot.y { border-color: var(--rd); color: var(--rd); background-color: var(--rds); }
+.omb .vz-slot.bor { border: 0; }
+.omb .vz-slot .fl { position: absolute; left: 6px; bottom: 6px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 7px; background: rgba(0, 0, 0, .6); color: #fff; }
+.omb .vz-slot .rm { position: absolute; top: -6px; right: -6px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--ink); color: var(--bg); font-size: 15px; display: flex; align-items: center; justify-content: center; }
+.omb .vz-hint { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 4px 4px 8px; }
+.omb .vz-hint .ic { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--ors); color: var(--or); }
+.omb .vz-hint.y .ic { background: var(--rds); color: var(--rd); }
+.omb .vz-hint p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.omb .vz-hint .m { font-size: 13px; font-weight: 700; color: var(--rd); }
+.omb .vz-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 13px 0; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); text-align: left; font-size: 15px; }
+.omb .vz-opt.on { color: var(--or); font-weight: 700; }
+.omb .vz-foot { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.omb .vz-var { display: flex; flex-direction: column; background: var(--surf); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); max-height: 260px; overflow-y: auto; }
+.omb .vz-var button { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border: 0; background: none; color: var(--ink); font-size: 15px; text-align: left; }
+.omb .vz-var button + button { border-top: 1px solid var(--line); }
+.omb .vz-ajrat { border: 0; border-top: 2px solid var(--line); margin: 16px 0 2px; }
+.omb .vz-ayb4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.omb .vz-ayb4-b { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 46px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--soft); color: var(--ink); font-size: 15px; font-weight: 700; }
+.omb .vz-ayb4-b svg { color: var(--muted); transform: rotate(90deg); transition: transform .15s; }
+.omb .vz-ayb4-b[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.omb .vz-ayb4-b.keng { grid-column: 1 / -1; justify-content: center; font-weight: 600; }
+.omb .vz-ayb4-b.on { border-color: currentColor; }
+.omb .vz-ayb4-b.on.or { background: var(--ors); color: var(--or); }
+.omb .vz-ayb4-b.on.amb { background: var(--ambs); color: var(--amb); }
+.omb .vz-ayb4-b.on.rd { background: var(--rds); color: var(--rd); }
+.omb .vz-ayb4-b.on.vi { background: rgba(139, 99, 224, .16); color: #9A78EA; }
+.omb .vz-ayb4-b.on:not(.or):not(.amb):not(.rd):not(.vi) { color: var(--or); }
+.omb .vz-akk { margin-top: 8px; border-radius: 14px; background: var(--soft); overflow: hidden; }
+.omb .vz-akk-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; background: none; border: 0; color: inherit; text-align: left; font-size: 14px; font-weight: 700; }
+.omb .vz-akk-t { flex: 1; color: var(--muted); }
+.omb .vz-akk-chev { color: var(--muted); display: flex; transition: transform .15s; }
+.omb .vz-akk.ochiq .vz-akk-chev { transform: rotate(90deg); }
+.omb .vz-akk .vz-opt { width: calc(100% - 16px); margin: 0 8px; }
+.omb .vz-akk .vz-opt:last-child { margin-bottom: 8px; }
+/* The camera, full screen: Telegram's Android browser ignores <input capture>. */
+
+/* Both roles: Омбор | Дўкон, one view at a time (owner, 12.11.2026). */
+.omb .seg { display: flex; gap: 6px; margin: 0 16px 6px; padding: 4px; border-radius: 14px; background: var(--soft); }
+.omb .seg button { flex: 1; height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); font-weight: 700; font-size: 15px; position: relative; }
+.omb .seg button.on { background: var(--surf); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.omb .seg .dot { position: absolute; top: 9px; right: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--or); }

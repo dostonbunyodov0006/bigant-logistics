@@ -1,0 +1,266 @@
+# BIGANT Logistics — edge config. ${DOMAIN} is substituted at container start
+# (see NGINX_ENVSUBST_FILTER in apps/web/Dockerfile).
+#
+# Topology: Cloudflare (proxied) -> this nginx (TLS, Origin CA cert) -> backend:3000
+# The dashboard is served as static files from the same origin as /api, so the
+# browser makes no cross-origin request and needs no CORS grant.
+
+# Cloudflare terminates the client connection, so every request arrives from a
+# Cloudflare address. Without this, rate limiting and logs would only ever see
+# Cloudflare's IP. Ranges: https://www.cloudflare.com/ips/
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/32;
+set_real_ip_from 2803:f800::/32;
+set_real_ip_from 2405:b500::/32;
+set_real_ip_from 2405:8100::/32;
+set_real_ip_from 2a06:98c0::/29;
+set_real_ip_from 2c0f:f248::/32;
+real_ip_header CF-Connecting-IP;
+
+# The SSE stream carries its JWT in the query string (EventSource cannot send
+# headers), so this format logs the path without ?token=... Everything else uses
+# the normal combined format.
+log_format sse_safe '$remote_addr - $remote_user [$time_local] "$request_method $uri" '
+                    '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
+# Driver app updates: test phones first (owner, 09.11.2026). The app stores
+# `tester="1"` with its updater when the server lists the account in
+# OTA_TESTER_USER_IDS, and the updater sends it on every manifest request in
+# Expo-Extra-Params (an Expo SFV dictionary: `tester="1"`, or `tester=?1`).
+# Those phones get `test` — what tools/publish-update.sh just sent; everyone
+# else gets `current` until tools/promote-update.sh moves it there.
+map $http_expo_extra_params $ota_dir {
+    default                              current;
+    "~*(^|[,;\s])tester=(\?1|\"1\")"     test;
+}
+
+upstream backend {
+    server backend:3000;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    # The container's own healthcheck, and anything on the box that wants to
+    # know nginx is up. It sits above the redirect on purpose: every other
+    # path on port 80 answers 301, which most checks read as success.
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Cloudflare already serves clients over HTTPS; this covers a direct hit.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    # Cloudflare Origin CA certificate. Trusted by Cloudflare only, which is why
+    # Cloudflare's SSL/TLS mode must be "Full (strict)" — "Flexible" would leave
+    # this leg in plaintext and "Off" would disable it entirely.
+    ssl_certificate     /etc/nginx/certs/origin.pem;
+    ssl_certificate_key /etc/nginx/certs/origin.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header X-Frame-Options           "DENY" always;
+    add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
+
+    # Proof photos post through here on their way to storage; the API itself
+    # accepts 10mb, so this only needs to not be the tighter limit.
+    client_max_body_size 12m;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # --- Live event stream -------------------------------------------------
+    # Must come before /api/ — nginx prefers the longest matching prefix, but
+    # buffering here would hold events until the buffer filled, which for a
+    # 25s-heartbeat stream means the dashboard would look frozen.
+    location = /api/realtime/stream {
+        access_log /var/log/nginx/access.log sse_safe;
+        proxy_pass http://backend/realtime/stream;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection        '';
+        proxy_buffering off;
+        proxy_cache off;
+        # Long-lived by design; the heartbeat keeps it under Cloudflare's ~100s
+        # idle timeout, so this only needs to not cut it short first.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        chunked_transfer_encoding off;
+    }
+
+    # --- API ---------------------------------------------------------------
+    # Trailing slash on proxy_pass strips the /api prefix: /api/orders -> /orders
+    location /api/ {
+        proxy_pass http://backend/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection        "";
+        proxy_read_timeout 60s;
+        # During a deploy the old backend goes away under nginx: give up on a
+        # dead address in 2s and try the other one, rather than hang 60s.
+        proxy_connect_timeout 2s;
+        proxy_next_upstream error timeout http_502 http_503;
+        proxy_next_upstream_tries 2;
+    }
+
+    # --- Proof photos -------------------------------------------------------
+    # Written by the API into the shared media directory under a fresh UUID and
+    # never changed afterwards, so they can be cached for good.
+    location /media/ {
+        alias /srv/media/;
+        limit_except GET HEAD { deny all; }
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        try_files $uri =404;
+    }
+
+    # --- Driver app updates -------------------------------------------------
+    # The app asks for a manifest on every launch and downloads what changed,
+    # so a screen or a rule reaches the drivers without anybody installing an
+    # APK. Only a new native module or permission needs one of those.
+    #
+    # The manifest is a multipart document written by the publish script, not
+    # generated here: nginx only has to hand it over with the right type.
+    # One manifest per platform (06.11.2026): an iPhone asks with
+    # `expo-platform: ios` and gets its own bundle; until one is published it
+    # gets 404 and keeps the code it was built with.
+    #
+    # Test phones (see the map above) get the manifest in `test`; with no
+    # `test` published, or none for this platform, they fall back to `current`.
+    location = /updates/manifest {
+        if ($http_expo_platform = "ios") { rewrite ^ /updates/manifest-ios last; }
+        root /srv/updates;
+        try_files /$ota_dir/manifest.multipart /current/manifest.multipart =404;
+        limit_except GET HEAD { deny all; }
+        types { }
+        default_type "multipart/mixed; boundary=bigant-update";
+        add_header Cache-Control "no-store";
+        add_header expo-protocol-version 1;
+        add_header expo-sfv-version 0;
+    }
+
+    location = /updates/manifest-ios {
+        root /srv/updates;
+        try_files /$ota_dir/manifest-ios.multipart /current/manifest-ios.multipart =404;
+        limit_except GET HEAD { deny all; }
+        types { }
+        default_type "multipart/mixed; boundary=bigant-update";
+        add_header Cache-Control "no-store";
+        add_header expo-protocol-version 1;
+        add_header expo-sfv-version 0;
+    }
+
+    # The bundle and its assets. Each file's name carries its own hash, so a
+    # name never points at different bytes and the cache can be permanent.
+    # The manifest's urls carry no channel, so a file is looked for in
+    # `current` and then in `test` (09.11.2026): a test phone downloads the
+    # test bundle by the same kind of url, and the same name is the same bytes
+    # in either. (The only regex location in this file; the `=` manifest
+    # locations above still win over it.)
+    location ~ ^/updates/(?<ota_file>.+)$ {
+        root /srv/updates;
+        limit_except GET HEAD { deny all; }
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files /current/$ota_file /test/$ota_file =404;
+    }
+
+    # --- Map tiles ---------------------------------------------------------
+    # One PMTiles archive for Uzbekistan, read by MapLibre with HTTP range
+    # requests — which is the whole point of the format: no tile server, no
+    # database, just a file. Built from the same OSM extract Valhalla uses.
+    location /tiles/ {
+        alias /srv/tiles/;
+        # Range requests are what make one 164 MB archive usable — a client
+        # reads the tiles it needs and nothing else. nginx advertises
+        # Accept-Ranges for static files itself, so adding it here only
+        # duplicates the header.
+        #
+        # One Cache-Control, set once: `expires` emits its own, and the two
+        # together left caches choosing between `max-age=2592000` and
+        # `public, immutable` on the same response.
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        # gzip would break range requests, and the tiles inside are already
+        # compressed.
+        gzip off;
+        try_files $uri =404;
+    }
+
+    # Map overlays (traffic lights, trees, district names, metro lines) are
+    # plain GeoJSON pulled from the OSM extract by deploy/scripts/
+    # map-overlays.py. Unlike the archive they are read whole, so they are
+    # sent compressed — about a seventh of the size, the map opens faster on
+    # a seller's phone. A pre-made .gz is served when there is one. Cached a
+    # day, not a month: they are rebuilt when the extract is.
+    location /tiles/overlays/ {
+        alias /srv/tiles/overlays/;
+        types { application/geo+json geojson; }
+        gzip_static on;
+        gzip on;
+        gzip_comp_level 6;
+        gzip_types application/geo+json;
+        add_header Cache-Control "public, max-age=86400";
+        try_files $uri =404;
+    }
+
+    # --- Dashboard ---------------------------------------------------------
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Vite emits content-hashed filenames, so these can be cached indefinitely.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # index.html must never be cached, or a deploy leaves clients on old assets.
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    }
+
+    # Client-side routing: unknown paths are React Router's, not 404s.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

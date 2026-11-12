@@ -1,0 +1,16 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "ios-testflight": {
+      "distribution": "store",
+      "env": { "NODE_ENV": "production" },
+      "ios": { "resourceClass": "default" }
+    }
+  },
+  "submit": {
+    "ios-testflight": {}
+  }
+}

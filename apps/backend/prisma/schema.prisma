@@ -1,0 +1,1960 @@
+// Full Logistics domain model. See ../../../PROJECT_PLAN.md §3.
+// Identity (User, PushToken) was introduced in Phase 0; this adds the rest.
+// Enums mirror packages/shared/src/enums.ts exactly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  admin
+  manager
+  seller
+  driver
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum DevicePlatform {
+  android
+  ios
+}
+
+enum DriverStatus {
+  available
+  busy
+  offline
+  on_delivery
+}
+
+enum OrderStatus {
+  created
+  awaiting_details
+  assigned_to_driver
+  driver_accepted
+  collecting_items
+  items_collected
+  on_the_way
+  arrived_at_customer
+  delivered
+  returning
+  returned
+  cancelled
+  problem
+}
+
+// Per-stop leg status on the driver's place-based journey (each pickup place).
+// What an order is for: a delivery, or fetching returned goods back from a
+// client days after one (client → warehouse, no collecting legs).
+enum OrderKind {
+  delivery
+  vozvrat
+}
+
+enum LegStatus {
+  pending
+  en_route
+  arrived
+}
+
+// Seller reservation board: how a seller claimed the vehicle.
+enum BookingKind {
+  zanyat // occupy a free truck now
+  bron // pre-book a slot in the queue / for later
+}
+
+// How many orders a single booking claims on the truck.
+enum BookingMode {
+  single // 1 order (1x)
+  double // 2 orders (2x), filled sequentially
+  full // Polniy — dynamic, seller keeps adding orders; truck exclusive
+}
+
+enum VehicleCategory {
+  katta // Isuzu (heavy)
+  orta // Gazel 4m / 6m (medium)
+  kichik // Van / Labo / Kombi (light)
+}
+
+// Incremental tariff earnings snapshotted when each paid action completes.
+enum TariffEarningType {
+  pickup_city
+  pickup_outside
+  delivery_city
+  delivery_outside
+}
+
+enum ReservationStatus {
+  awaiting // active slot — seller filling details (fill-timer running)
+  queued // next slot in a multi-order booking; activates when the prior one is filled
+  filled // committed to an order (Band qilish)
+  cancelled // Zakazni Otmen
+  expired // fill-timer ran out
+}
+
+enum OrderPriority {
+  normal
+  urgent
+}
+
+enum ItemCollectionStatus {
+  pending
+  collected
+  problem
+}
+
+enum AssignmentStatus {
+  pending_driver_response
+  accepted
+  rejected
+  cancelled
+  completed
+}
+
+enum PickupPlaceType {
+  warehouse
+  market
+  custom
+}
+
+enum VehicleType {
+  car
+  van
+  truck
+  motorcycle
+  other
+}
+
+enum VehicleStatus {
+  active
+  inactive
+  maintenance
+}
+
+enum VehicleDocType {
+  texosmotr
+  gas_inspection
+  insurance
+  // Who may drive it on the owner's behalf, and until when.
+  power_of_attorney
+  // Window tint permit.
+  tint
+  // The city's permit for the advertising painted on the lorry; one year.
+  advertising_permit
+  other
+}
+
+enum IncidentType {
+  accident
+  breakdown
+  damage
+  other
+}
+
+enum DriverDocType {
+  license
+  power_of_attorney
+  insurance
+  other
+}
+
+enum NotificationChannel {
+  push
+  in_app
+}
+
+enum TelegramReportStatus {
+  pending
+  sent
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  phoneNumber  String     @unique @map("phone_number")
+  passwordHash String     @map("password_hash")
+  role         Role
+  status       UserStatus @default(active)
+  // Sellers: their Telegram user id, sent to accounting with each vozvrat.
+  telegramId   String?    @map("telegram_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  pushTokens          PushToken[]
+  driver              Driver?
+  clientsCreated      Client[]            @relation("ClientCreatedBy")
+  returnsConfirmed    Order[]             @relation("OrderReturnConfirmedBy")
+  suppliersCreated    Supplier[]
+  // Clients this seller owns — the ones they see and book for.
+  clientsOwned        Client[]            @relation("ClientSeller")
+  pickupPlacesCreated PickupPlace[]
+  ordersCreated       Order[]
+  assignmentsCreated  DriverAssignment[]
+  notifications       Notification[]
+  quantityAudits      OrderItemQuantityAudit[]
+  finesIssued         Fine[]
+  leaveReviews        LeaveRequest[]
+  expensesCreated     Expense[]
+  fuelReviews         FuelLog[]                @relation("FuelLogReviewer")
+  serviceDecided      ServiceVisit[]           @relation("ServiceVisitDecider")
+  serviceAssigned     ServiceVisit[]           @relation("ServiceVisitAssigner")
+  serviceReviewed     ServiceVisit[]           @relation("ServiceVisitReviewer")
+  reservations        Reservation[]
+
+  @@map("users")
+}
+
+model PushToken {
+  id        String         @id @default(uuid())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String         @map("user_id")
+  fcmToken  String         @unique @map("fcm_token")
+  platform  DevicePlatform
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@map("push_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Actors / reference data
+// ---------------------------------------------------------------------------
+
+model Driver {
+  id                String       @id @default(uuid())
+  // The phone's own location service sends with this key, with no login and
+  // no app open (owner, 05.11.2026). Only its SHA-256 is kept.
+  locationKeyHash   String?      @unique @map("location_key_hash")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String       @unique @map("user_id")
+  currentStatus     DriverStatus @default(offline) @map("current_status")
+  vehicleInfo       String?      @map("vehicle_info")
+  vehicle           Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  vehicleId         String?      @unique @map("vehicle_id")
+  // Profile ("Ma'lumotlarim"): birth date, licence category (e.g. "B, C"), home tuman.
+  birthDate         DateTime?    @map("birth_date")
+  licenseCategory   String?      @map("license_category")
+  // Off the licence: issued (his experience counts from here) and expiry.
+  licenseIssuedAt   DateTime?    @map("license_issued_at")
+  licenseExpiresAt  DateTime?    @map("license_expires_at")
+  // Both sides of the driving licence, beside the lorry's papers.
+  licenseFrontUrl   String?      @map("license_front_url")
+  licenseBackUrl    String?      @map("license_back_url")
+  homeDistrict      GeoDistrict? @relation(fields: [homeDistrictCode], references: [code], onDelete: SetNull)
+  homeDistrictCode  String?      @map("home_district_code")
+  locationLat       Float?       @map("location_lat")
+  locationLng       Float?       @map("location_lng")
+  locationUpdatedAt DateTime?    @map("location_updated_at")
+  // Worked out from his last two fixes; where he last stood and since when he
+  // has been within 50 m of it, for "Turibdi: 12 daq" on the office map.
+  locationSpeedKmh  Float?       @map("location_speed_kmh")
+  anchorLat         Float?       @map("anchor_lat")
+  anchorLng         Float?       @map("anchor_lng")
+  movedAt           DateTime?    @map("moved_at")
+  // Short break / temporary excuse end time (Tanaffus); null = not on break.
+  breakUntil        DateTime?    @map("break_until")
+  /// Why he is away, in his own words — shown to the office while the break
+  /// lasts, cleared when he is back.
+  breakReason       String?      @map("break_reason")
+  // When the current break began, so its length can be taken off the shift.
+  breakStartedAt    DateTime?    @map("break_started_at")
+  // Last time the driver app itself (its JS, with his login) reached the
+  // server — not the phone's location service. Written at most once a minute;
+  // the office is told when it goes quiet on shift (app-health/, owner, 09.11.2026).
+  lastAppSeenAt     DateTime?    @map("last_app_seen_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  ordersAssigned Order[]
+  assignments    DriverAssignment[]
+  documents      DriverDocument[]
+  workLogs       WorkLog[]
+  breaks         DriverBreak[]
+  carryOvers     OrderCarryOver[]
+  viloyatOvertimes ViloyatOvertime[]
+  morningStarts  MorningStart[]
+  eveningOvertimes EveningOvertime[]
+  bonusLogs      BonusLog[]
+  tariffEarnings DriverTariffEarning[]
+  fines          Fine[]
+  leaveRequests  LeaveRequest[]
+  expenses       Expense[]
+  fuelLogs       FuelLog[]
+  serviceVisits  ServiceVisit[]
+  serviceReasons ServiceReason[]
+  workSchedules  WorkSchedule[]
+
+  locationPings     DriverLocationPing[]
+
+  @@map("drivers")
+}
+
+// Where a driver's phone was, kept as a trail so the office can see the day's
+// route. Written from the location update only when the truck has moved or a
+// minute has passed (track-math.ts), and pruned after TRACK_RETENTION_DAYS.
+// The morning early start: the driver's first "yo'lga chiqdim" before 09:00 on
+// an Ertangi order booked for "9:00 dan oldin", confirmed once the GPS trail
+// shows the lorry moving (orders/morning-start.ts). One per driver per day.
+// The evening extra (Kechki qo'shimcha): a closed shift's minutes from the end
+// of the working day to his last photo sent to the groups, paid by the hour
+// (drivers/evening-overtime.service.ts). One per shift.
+model EveningOvertime {
+  id          String   @id @default(uuid())
+  driver      Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId    String   @map("driver_id")
+  workLog     WorkLog  @relation(fields: [workLogId], references: [id], onDelete: Cascade)
+  workLogId   String   @unique @map("work_log_id")
+  dayEndAt    DateTime @map("day_end_at")
+  lastPhotoAt DateTime @map("last_photo_at")
+  // Back from a Viloyat: when the lorry entered Tashkent city, which is when the
+  // paid evening ended. Null when it ended at the last photo.
+  borderAt    DateTime? @map("border_at")
+  minutes     Int
+  rateHourSom Int      @map("rate_hour_som")
+  amountSom   Int      @map("amount_som")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([driverId, lastPhotoAt])
+  @@map("evening_overtimes")
+}
+
+model MorningStart {
+  id           String    @id @default(uuid())
+  driver       Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String    @map("driver_id")
+  // The Tashkent calendar day, as the order's UTC-midnight label.
+  day          DateTime  @db.Date
+  order        Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId      String?   @map("order_id")
+  // pickup | customer | return — which "yo'lga chiqdim" it was.
+  action       String
+  pressedAt    DateTime  @map("pressed_at")
+  pressLat     Float?    @map("press_lat")
+  pressLng     Float?    @map("press_lng")
+  // waiting_gps → confirmed (moved) or no_move (never moved off).
+  status       String    @default("waiting_gps")
+  movedAt      DateTime? @map("moved_at")
+  startedAt    DateTime? @map("started_at")
+  earlyMinutes Int       @default(0) @map("early_minutes")
+  // The lorry class's hourly rate when it was confirmed, and what it paid.
+  rateHourSom  Int       @default(0) @map("rate_hour_som")
+  amountSom    Int       @default(0) @map("amount_som")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([driverId, day])
+  @@index([status])
+  @@map("morning_starts")
+}
+
+model DriverLocationPing {
+  id         String   @id @default(uuid())
+  driver     Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId   String   @map("driver_id")
+  lat        Float
+  lng        Float
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@index([driverId, recordedAt])
+  @@index([recordedAt])
+  @@map("driver_location_pings")
+}
+
+// A driver work shift. clockOutAt is null while the shift is open — at most one
+// open shift per driver at a time (enforced in the service). Feeds timesheets and
+// work-time reports.
+model WorkLog {
+  id               String    @id @default(uuid())
+  breaks           DriverBreak[]
+  driver           Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId         String    @map("driver_id")
+  clockInAt        DateTime  @default(now()) @map("clock_in_at")
+  clockOutAt       DateTime? @map("clock_out_at")
+  // Reason captured when the driver clocks in after the expected shift start.
+  lateReason       String?   @map("late_reason")
+  // Reason captured when the driver clocks out before the expected shift end.
+  earlyLeaveReason String?   @map("early_leave_reason")
+  // Server-computed against the effective schedule in Tashkent time — never
+  // trusted from the client. Only the day's first clock-in can be late.
+  isLate           Boolean   @default(false) @map("is_late")
+  lateMinutes      Int       @default(0) @map("late_minutes")
+  isEarlyLeave     Boolean   @default(false) @map("is_early_leave")
+  // "Polniy" (owner, 12.11.2026): he asked for the rest of the day off and
+  // ended the shift with it; the seller board does not offer him that day.
+  // Cleared if the shift is opened again.
+  dayOff           Boolean   @default(false) @map("day_off")
+  earlyMinutes     Int       @default(0) @map("early_minutes")
+  // Snapshot of the expected window ("HH:MM"), so later schedule edits leave
+  // historical attendance untouched.
+  expectedStart    String?   @map("expected_start")
+  expectedEnd      String?   @map("expected_end")
+  // How the shift ended: "driver" (the toggle), "end_check_stop" (STOP on the
+  // end-of-day reminder), "auto_no_answer" (three reminders went unanswered) or
+  // "auto_stale" (still open from an earlier day). Null while open.
+  closeSource      String?   @map("close_source")
+  // Ended by the system, at the driver's last activity — for admin to review.
+  autoClosed       Boolean   @default(false) @map("auto_closed")
+  // End-of-day check (see drivers/shift-end-check.ts): when it last ran for
+  // this shift, what it saw, the last reminder sent and answered, and how many
+  // reminders in a row went unanswered.
+  endCheckRanAt      DateTime? @map("end_check_ran_at")
+  endCheckZone       String?   @map("end_check_zone")
+  endCheckSentAt     DateTime? @map("end_check_sent_at")
+  endCheckAnsweredAt DateTime? @map("end_check_answered_at")
+  endCheckUnanswered Int       @default(0) @map("end_check_unanswered")
+  // Each "+30 min" answer with what he said he was still doing:
+  // [{ "at": ISO, "note": "..." }] (owner, 07.11.2026).
+  endCheckNotes      Json?     @map("end_check_notes")
+  // Orders he ended this shift with, to deliver the next day.
+  carryOvers       OrderCarryOver[]
+  // Minutes spent on Tanaffus breaks during this shift — not worked time.
+  breakMinutes     Int       @default(0) @map("break_minutes")
+  // Each time the shift was closed and reopened the same day, the time he was
+  // off: [{ "from": ISO, "to": ISO }]. Not paid as evening extra (owner, 07.11.2026).
+  offPeriods       Json?     @map("off_periods")
+  // Set when staff corrected the shift's times (forgotten clock-out, wrong
+  // auto-close): who, when and why. The name is a snapshot for the history.
+  correctedAt      DateTime? @map("corrected_at")
+  correctedById    String?   @map("corrected_by_id")
+  correctedByName  String?   @map("corrected_by_name")
+  correctionNote   String?   @map("correction_note")
+  // Viloyat extra pay: when the shift-end check ran (whatever it found), and
+  // what it paid, if anything.
+  overtimeCheckedAt DateTime? @map("overtime_checked_at")
+  // When the evening extra (minutes past six to the last photo) was worked out.
+  eveningCheckedAt DateTime? @map("evening_checked_at")
+  // When the driver was last told his position stopped coming (GPS/internet off).
+  silenceWarnedAt  DateTime? @map("silence_warned_at")
+  // The office was told the driver app went quiet during this shift: since
+  // when it was quiet and when the message went. Cleared once the app is back.
+  appSilentSince   DateTime? @map("app_silent_since")
+  appSilentAlertAt DateTime? @map("app_silent_alert_at")
+  eveningOvertime  EveningOvertime?
+  viloyatOvertime   ViloyatOvertime?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  // Org-wide timesheet / work report scan a date range across all drivers.
+  // Measured over 50k shifts: 12.9 ms (seq scan + sort) -> 1.6 ms.
+  @@index([clockInAt])
+  // Plus, in SQL only (Prisma cannot express it): a partial unique index
+  // work_logs_one_open_per_driver on (driver_id) WHERE clock_out_at IS NULL —
+  // at most one open shift per driver, even under a double tap.
+  @@map("work_logs")
+}
+
+model DriverDocument {
+  id                  String        @id @default(uuid())
+  driver              Driver        @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId            String        @map("driver_id")
+  type                DriverDocType @default(other)
+  number              String?
+  issuedAt            DateTime?     @map("issued_at")
+  expiresAt           DateTime      @map("expires_at")
+  notes               String?
+  // Last expiry stage ("soon"/"expired") admins were notified about; null = not yet
+  // notified (or re-armed after the expiry date was edited). Prevents daily spam.
+  expiryNotifiedStage String?       @map("expiry_notified_stage")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  @@map("driver_documents")
+}
+
+model Client {
+  id           String       @id @default(uuid())
+  name         String
+  phoneNumber  String       @map("phone_number")
+  // Free-text landmark / house detail — optional now that region/district are structured.
+  address      String?
+  location     String?
+  // Official geo: region (viloyat) is required going forward; district (tuman) only
+  // used for Tashkent. Region drives the tariff shahar/tashqari split via Region.isCity.
+  region       Region?      @relation(fields: [regionCode], references: [code])
+  regionCode   String?      @map("region_code")
+  district     GeoDistrict? @relation(fields: [districtCode], references: [code])
+  districtCode String?      @map("district_code")
+  // Pinned on a map at creation (Photon search + draggable marker). Nullable only
+  // for rows that predate the picker; the API requires both for new clients.
+  lat          Float?
+  lng          Float?
+  createdBy    User         @relation("ClientCreatedBy", fields: [createdById], references: [id])
+  createdById  String       @map("created_by")
+  // The seller this client belongs to: only they (and staff) see it. Null for a
+  // client admin added without choosing one — staff-only until assigned. Kept
+  // apart from createdBy so reassigning a client never rewrites who typed it in.
+  seller       User?        @relation("ClientSeller", fields: [sellerId], references: [id])
+  sellerId     String?      @map("seller_id")
+  /// Somebody who ordered once. The order needs a client to hang on, but the
+  /// seller's address book does not need the name: a one-off is kept out of
+  /// the list and out of the search, and only its own orders still show it.
+  oneOff       Boolean      @default(false) @map("one_off")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  orders    Order[]
+  addresses ClientAddress[]
+
+  @@index([regionCode])
+  @@index([sellerId])
+  @@map("clients")
+}
+
+// Official Uzbekistan region (viloyat), seeded from MHOBT data. `isCity` = Tashkent
+// city + Tashkent region — drives the tariff shahar (in-city) / tashqari (outside) split.
+model Region {
+  code          String              @id
+  name          String
+  isCity        Boolean             @default(false) @map("is_city")
+  districts     GeoDistrict[]
+  clients       Client[]
+  clientAddresses ClientAddress[]
+  orders        Order[]
+  bonusRules    BonusRule[]
+  pickupSources OrderPickupSource[]
+  pickupPlaces  PickupPlace[]
+
+  @@map("regions")
+}
+
+// Official district (tuman) within a region. Surfaced in the UI only for Tashkent.
+model GeoDistrict {
+  code          String              @id
+  name          String
+  region        Region              @relation(fields: [regionCode], references: [code])
+  regionCode    String              @map("region_code")
+  clients       Client[]
+  clientAddresses ClientAddress[]
+  orders        Order[]
+  bonusRules    BonusRule[]
+  pickupSources OrderPickupSource[]
+  driversHome   Driver[]
+  pickupPlaces  PickupPlace[]
+
+  @@index([regionCode])
+  @@map("geo_districts")
+}
+
+model PickupPlace {
+  id              String          @id @default(uuid())
+  name            String
+  address         String?
+  // Who to ring there — the driver calls before he arrives (owner, 11.11.2026).
+  phoneNumber     String?         @map("phone_number")
+  type            PickupPlaceType
+  isTemporary     Boolean         @default(false) @map("is_temporary")
+  // Official geo of the place itself — copied onto every order's pickup source,
+  // so the city/outside pickup bonus never depends on per-order data entry.
+  region          Region          @relation(fields: [regionCode], references: [code])
+  regionCode      String          @map("region_code")
+  geoDistrict     GeoDistrict?    @relation(fields: [geoDistrictCode], references: [code], onDelete: SetNull)
+  geoDistrictCode String?         @map("geo_district_code")
+  // Pinned on a map at creation; nullable only for rows that predate the picker.
+  lat             Float?
+  lng             Float?
+  /// The supplier this yard belongs to; null for our own shop and warehouse.
+  supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId      String?         @map("supplier_id")
+  /// A yard the lorry went to once. Kept off the pickup-place list for the
+  /// same reason a one-off client is kept out of the address book.
+  oneOff          Boolean         @default(false) @map("one_off")
+  createdBy       User            @relation(fields: [createdById], references: [id])
+  createdById     String          @map("created_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  orderItems         OrderItem[]
+  orderPickupSources OrderPickupSource[] @relation("SourcePlace")
+  // Returns sent here: the supplier's place the seller picked (owner, 12.11.2026).
+  returnSources      OrderPickupSource[] @relation("ReturnPlace")
+
+  @@index([supplierId])
+  @@map("pickup_places")
+}
+
+/// One place a client takes deliveries at.
+///
+/// A regular customer has a shop, a second shop and a warehouse, and the
+/// seller should choose between them by name rather than describe a location
+/// again on every order. The pin and the official geo live here, and the order
+/// copies whichever one was chosen — the copy is what the driver drives to, so
+/// editing an address later never moves a delivery that already happened.
+model ClientAddress {
+  id           String       @id @default(uuid())
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String       @map("client_id")
+  /// What the seller picks from the list: "Chilonzor filiali", "Ombor".
+  label        String
+  /// Street, landmark, house — the words the driver reads.
+  address      String?
+  lat          Float?
+  lng          Float?
+  region       Region?      @relation(fields: [regionCode], references: [code])
+  regionCode   String?      @map("region_code")
+  district     GeoDistrict? @relation(fields: [districtCode], references: [code])
+  districtCode String?      @map("district_code")
+  /// The one offered first. At most one per client, enforced in SQL.
+  isDefault    Boolean      @default(false) @map("is_default")
+  /// A closed branch is hidden from new orders and kept on the old ones.
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@index([clientId, active])
+  @@map("client_addresses")
+}
+
+/// A supplier whose goods the drivers collect.
+///
+/// One supplier may load from several yards; each yard is a pickup place that
+/// points here, so the seller picks the supplier by name and then the yard,
+/// instead of hunting through a flat list of look-alike names.
+model Supplier {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  phoneNumber String?  @map("phone_number")
+  active      Boolean  @default(true)
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pickupPlaces PickupPlace[]
+
+  @@map("suppliers")
+}
+
+// Geographic zone used for routing, zoning, and bonus calculation. Names are unique.
+enum BonusAppliesTo {
+  all
+  urgent
+  normal
+}
+
+enum LeaveType {
+  sick
+  vacation
+  personal
+  other
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
+// A per-trip bonus rule. On delivery, every active rule whose district (if set)
+// and priority scope match the order accrues `amount` to the assigned driver.
+model BonusRule {
+  id              String         @id @default(uuid())
+  name            String
+  active          Boolean        @default(true)
+  amount          Int // bonus in UZS som
+  appliesTo       BonusAppliesTo @default(all) @map("applies_to")
+  // Official geo — scope by region (+ optional Tashkent district).
+  region          Region?        @relation(fields: [regionCode], references: [code], onDelete: SetNull)
+  regionCode      String?        @map("region_code")
+  geoDistrict     GeoDistrict?   @relation(fields: [geoDistrictCode], references: [code], onDelete: SetNull)
+  geoDistrictCode String?        @map("geo_district_code")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  logs BonusLog[]
+
+  @@map("bonus_rules")
+}
+
+// An accrued bonus for a delivered order. `ruleName`/`amount` are snapshotted so
+// history survives rule edits/deletes. Unique per (order, rule) — no double-accrual.
+model BonusLog {
+  id        String     @id @default(uuid())
+  driver    Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId  String     @map("driver_id")
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String     @map("order_id")
+  rule      BonusRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  ruleId    String?    @map("rule_id")
+  ruleName  String     @map("rule_name")
+  amount    Int
+  accruedAt DateTime   @default(now()) @map("accrued_at")
+
+  @@unique([orderId, ruleId])
+  @@index([driverId])
+  @@map("bonus_logs")
+}
+
+// Pickup and delivery tariff pay, separate from configurable bonus-rule logs.
+model DriverTariffEarning {
+  id             String             @id @default(uuid())
+  eventKey       String             @unique @map("event_key")
+  type           TariffEarningType
+  amount         Int
+  driver         Driver             @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId       String             @map("driver_id")
+  order          Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId        String             @map("order_id")
+  pickupSource   OrderPickupSource? @relation(fields: [pickupSourceId], references: [id], onDelete: SetNull)
+  pickupSourceId String?            @unique @map("pickup_source_id")
+  earnedAt       DateTime           @default(now()) @map("earned_at")
+
+  @@index([driverId, earnedAt])
+  @@index([orderId])
+  @@map("driver_tariff_earnings")
+}
+
+// Extra pay for a Viloyat trip running past the end of the work day, by road
+// kilometre (drivers/viloyat-overtime.ts). One per shift, computed at shift
+// end; the kilometres, price and amount are kept as they were then.
+model ViloyatOvertime {
+  id           String   @id @default(uuid())
+  driver       Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String   @map("driver_id")
+  workLog      WorkLog  @relation(fields: [workLogId], references: [id], onDelete: Cascade)
+  workLogId    String   @unique @map("work_log_id")
+  // "in_hand": the last drop-off still ahead. "returning": no Viloyat order
+  // left, but one delivered this shift took him out there.
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      String   @map("order_id")
+  kind         String
+  // Where he was: the GPS fix used, and whether it was older than 30 minutes.
+  fromLat      Float    @map("from_lat")
+  fromLng      Float    @map("from_lng")
+  gpsAt        DateTime @map("gps_at")
+  gpsStale     Boolean  @default(false) @map("gps_stale")
+  toDropoffKm  Float    @map("to_dropoff_km")
+  toBorderKm   Float    @map("to_border_km")
+  totalKm      Float    @map("total_km")
+  category     String?
+  ratePerKmSom Int      @map("rate_per_km_som")
+  amountSom    Int      @map("amount_som")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([driverId, createdAt])
+  @@map("viloyat_overtimes")
+}
+
+// One returned product in a vozvrat: how many (in the product's unit — 2.5 kg
+// is fine), usable or damaged, why, and who is to blame (code from
+// VOZVRAT_REASONS; culprit only for "x"). Recorded when the driver starts the
+// return, with a photo of the product. Which storekeeper is involved is not
+// recorded here: the warehouse says so when it takes the goods back.
+model OrderReturnItem {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String   @map("order_id")
+  productId   String?  @map("product_id")
+  name        String
+  unit        String?
+  xodovoy     Boolean?
+  quantity    Decimal  @db.Decimal(12, 3)
+  condition   String
+  reasonCode  String   @map("reason_code")
+  otherReason String?  @map("other_reason")
+  culprit     String?
+  photoUrl    String   @map("photo_url")
+  // More photos of the same product, up to three (owner, 29.10.2026).
+  photoUrls   String[] @default([]) @map("photo_urls")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("order_return_items")
+}
+
+// The vozvrat as sent to the accounting system (POST …/api/tashqi/vozvrat):
+// the exact payload, and delivery state so a failed send is retried.
+// pending → sent | rejected (the service said the data is wrong: 400).
+model VozvratReport {
+  id            String    @id @default(uuid())
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String    @unique @map("order_id")
+  payload       Json
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastStatus    Int?      @map("last_status")
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
+  sentAt        DateTime? @map("sent_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@map("vozvrat_reports")
+}
+
+// ---------------------------------------------------------------------------
+// Omborchi (owner, 05.11.2026): the warehouse side of a vozvrat, moved here
+// from the Telegram mini app. The storekeeper opens it inside the mini app
+// (the same bot), counts each item, photographs it and takes it in; the
+// manager (rahbar) sees every return, the statistics and the product list.
+// ---------------------------------------------------------------------------
+
+// What came back, as the warehouse sees it: the driver's write-up when the
+// seller confirmed it, then the storekeeper's own count.
+model WarehouseReturn {
+  id              String    @id @default(uuid())
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId         String    @map("order_id")
+  // The number everyone calls it by ("Возврат №…"): the order's number.
+  orderNumber     Int       @map("order_number")
+  // Where it is taken in (owner, 07.11.2026): "warehouse" (omborchi) or
+  // "store" (dokonchi). A return to a supplier gets no row at all. An order
+  // whose stops go to both has one row for each.
+  destination     String    @default("warehouse")
+  at              DateTime
+  driverName      String    @map("driver_name")
+  clientName      String    @map("client_name")
+  sellerName      String    @map("seller_name")
+  comment         String?
+  // The driver's items: [{nom, soni, birlik, holat, sabab, izoh_sabab, aybdor, rasmlar, mahsulot_id}].
+  items           Json
+  // The storekeeper's count, one per item: {nom, soni, holat, sabab, izoh_sabab, aybdor, mahsulot_id, rasm: {u, y}}.
+  answer          Json?
+  answerComment   String?   @map("answer_comment")
+  overallPhotoUrl String?   @map("overall_photo_url")
+  acceptedByTelegramId String? @map("accepted_by_telegram_id")
+  acceptedByName  String?   @map("accepted_by_name")
+  acceptedAt      DateTime? @map("accepted_at")
+  // The office marked it taken in with no count (owner, 07.11.2026); the
+  // storekeeper may still send the count once (acceptedByTelegramId set then).
+  releasedByOffice Boolean  @default(false) @map("released_by_office")
+  // Last reminder to the storekeepers about this one (once every three hours).
+  remindedAt      DateTime? @map("reminded_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@unique([orderId, destination])
+  @@unique([orderNumber, destination])
+  @@index([acceptedAt])
+  @@map("warehouse_returns")
+}
+
+// The product list a return is written against (the mini app's, ids kept).
+// "tasdiq" is on the list; "yangi" was typed by someone and waits for the
+// manager to confirm it (hodovoy or not) or merge it into an existing one.
+model VozvratProduct {
+  id                Int      @id @default(autoincrement())
+  name              String
+  // Name folded for comparing: lower case, no spaces or punctuation.
+  key               String   @unique
+  unit              String?
+  hodovoy           Boolean?
+  status            String   @default("tasdiq")
+  addedBy           String?  @map("added_by")
+  firstReturnNumber Int?     @map("first_return_number")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("vozvrat_products")
+}
+
+// Who may open the warehouse page, by Telegram id: storekeepers take returns
+// in, managers see them all. Kept by the admin on the Xodimlar page.
+model VozvratStaff {
+  id         String   @id @default(uuid())
+  telegramId String   @unique @map("telegram_id")
+  name       String
+  // "omborchi" (warehouse) or "dokonchi" (our shop, owner 07.11.2026); "rahbar"
+  // is an old name nothing grants any more. One person may hold several.
+  roles      String[]
+  // Keeps the page and the "Qabul qildim" button, gets no Telegram message
+  // about returns — until the owner says otherwise (owner, 11.11.2026).
+  muted      Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("vozvrat_staff")
+}
+
+// A manually issued penalty against a driver (jarima). Unlike bonuses these are
+// never auto-accrued — an admin/manager creates each one, optionally tied to an
+// order. Feeds the payroll summary (bonuses − fines).
+model Fine {
+  id         String   @id @default(uuid())
+  driver     Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId   String   @map("driver_id")
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId    String?  @map("order_id")
+  reason     String
+  amount     Int // fine in UZS som
+  issuedBy   User     @relation(fields: [issuedById], references: [id])
+  issuedById String   @map("issued_by_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  @@map("fines")
+}
+
+// A driver leave/absence request (ruxsat). Driver submits pending; an
+// admin/manager approves or rejects it (recorded in reviewedBy/reviewNote).
+model LeaveRequest {
+  id           String      @id @default(uuid())
+  driver       Driver      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String      @map("driver_id")
+  type         LeaveType   @default(other)
+  startDate    DateTime    @map("start_date")
+  endDate      DateTime    @map("end_date")
+  reason       String?
+  status       LeaveStatus @default(pending)
+  reviewedBy   User?       @relation(fields: [reviewedById], references: [id])
+  reviewedById String?     @map("reviewed_by_id")
+  reviewNote   String?     @map("review_note")
+  reviewedAt   DateTime?   @map("reviewed_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+// Catalog of expense categories (rasxod_types) — e.g. fuel, repairs, insurance.
+model ExpenseType {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  expenses Expense[]
+
+  @@map("expense_types")
+}
+
+// A recorded expense (rasxod). Optionally attributed to a vehicle and/or driver.
+model Expense {
+  id          String      @id @default(uuid())
+  type        ExpenseType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  typeId      String      @map("type_id")
+  amount      Int // expense in UZS som
+  spentAt     DateTime    @map("spent_at")
+  note        String?
+  vehicle     Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  vehicleId   String?     @map("vehicle_id")
+  driver      Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId    String?     @map("driver_id")
+  // Null on the rows written for fuel and service (auto-expense.ts).
+  createdBy   User?       @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdById String?     @map("created_by_id")
+  // Fuel and service land here by themselves, one row each (owner, 29.10.2026).
+  fuelLog          FuelLog?      @relation(fields: [fuelLogId], references: [id], onDelete: Cascade)
+  fuelLogId        String?       @unique @map("fuel_log_id")
+  serviceVisit     ServiceVisit? @relation(fields: [serviceVisitId], references: [id], onDelete: Cascade)
+  serviceVisitId   String?       @unique @map("service_visit_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([typeId])
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([spentAt])
+  @@map("expenses")
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id                   String        @id @default(uuid())
+  orderNumber          Int           @unique @default(autoincrement()) @map("order_number")
+  client               Client        @relation(fields: [clientId], references: [id])
+  /// Which of the client's addresses this delivery was for. The snapshot below
+  /// is what the driver goes to; this only says where it came from.
+  deliveryAddress      ClientAddress? @relation(fields: [clientAddressId], references: [id], onDelete: SetNull)
+  clientAddressId      String?       @map("client_address_id")
+  clientId             String        @map("client_id")
+  // Snapshots of client details at order creation time.
+  clientName           String        @map("client_name")
+  clientPhoneNumber    String        @map("client_phone_number")
+  clientAddress        String        @map("client_address")
+  deliveryDatetime     DateTime      @map("delivery_datetime")
+  comment              String?
+  priority             OrderPriority @default(normal)
+  status               OrderStatus   @default(created)
+  kind                 OrderKind     @default(delivery)
+  // The delivery a vozvrat order fetches goods back from, when known.
+  originalOrderId      String?       @map("original_order_id")
+  originalOrder        Order?        @relation("VozvratOf", fields: [originalOrderId], references: [id], onDelete: SetNull)
+  vozvratOrders        Order[]       @relation("VozvratOf")
+  // Set once when the driver departs for the first pickup; used for delivery duration.
+  journeyStartedAt     DateTime?     @map("journey_started_at")
+  // Set when the order transitions to `delivered` — drives driver earnings by period.
+  deliveredAt          DateTime?     @map("delivered_at")
+  cancellationReason   String?       @map("cancellation_reason")
+  // Istisno (exception) reason, order-level.
+  problemReason        String?       @map("problem_reason")
+  problemComment       String?       @map("problem_comment")
+  // Vozrat (return): destination (warehouse/store/supplier), optional reason, drop-off time.
+  returnReason         String?       @map("return_reason")
+  returnDestination    String?       @map("return_destination")
+  // Return-trip stage (Vozrat journey): null=carrying, heading→arrived, then returned.
+  returnStage          String?       @map("return_stage")
+  // The seller checks what the driver wrote up before it travels: the goods go
+  // on his account, so an item list he has not seen is not one the warehouse
+  // should receive. Only a write-up with items waits; a plain return does not.
+  returnItemsConfirmedAt   DateTime? @map("return_items_confirmed_at")
+  returnItemsConfirmedBy   User?     @relation("OrderReturnConfirmedBy", fields: [returnItemsConfirmedById], references: [id], onDelete: SetNull)
+  returnItemsConfirmedById String?   @map("return_items_confirmed_by_id")
+  // Sent back to the driver to write again, with the seller's words for why.
+  returnItemsRejectedAt    DateTime? @map("return_items_rejected_at")
+  returnItemsRejectReason  String?   @map("return_items_reject_reason")
+  // The storekeeper took the goods in, in the vozvrat mini app. Until then a
+  // written-up return bound for the warehouse cannot be handed over.
+  returnWarehouseAcceptedAt DateTime? @map("return_warehouse_accepted_at")
+  // The same for a return bound for our shop (owner, 07.11.2026): its
+  // responsible person (dokonchi) takes it in on the same page.
+  returnStoreAcceptedAt     DateTime? @map("return_store_accepted_at")
+  // The driver put the return aside ("Ojidaniya") to do the next order first;
+  // cleared when he takes up its legs again.
+  returnDeferredAt         DateTime? @map("return_deferred_at")
+  // The seller's own account of the return, when he disagrees with the driver's:
+  // who he says is to blame, and in his words. The driver's write-up stays as is.
+  returnSellerCulprit      String?   @map("return_seller_culprit")
+  returnSellerNote         String?   @map("return_seller_note")
+  // Proof photo taken when the return was handed back (also sent to the Vozrat group).
+  returnProofPhotoUrl  String?       @map("return_proof_photo_url")
+  returnedAt           DateTime?     @map("returned_at")
+  proofPhotoUrl        String?       @map("proof_photo_url")
+  createdBySeller      User          @relation(fields: [createdBySellerId], references: [id])
+  createdBySellerId    String        @map("created_by_seller_id")
+  assignedDriver       Driver?       @relation(fields: [assignedDriverId], references: [id])
+  assignedDriverId     String?       @map("assigned_driver_id")
+  // Official geo — snapshotted from the customer at creation.
+  region               Region?       @relation(fields: [regionCode], references: [code], onDelete: SetNull)
+  regionCode           String?       @map("region_code")
+  geoDistrict          GeoDistrict?  @relation(fields: [geoDistrictCode], references: [code], onDelete: SetNull)
+  geoDistrictCode      String?       @map("geo_district_code")
+  // Delivery point, snapshotted from the client at creation like the fields above,
+  // so an order's destination does not move when the client record is edited.
+  deliveryLat          Float?        @map("delivery_lat")
+  deliveryLng          Float?        @map("delivery_lng")
+  // Position of this order's client stop in the driver's merged trip. Null for
+  // an ordinary order, which is driven on its own and needs no cross-order
+  // ordering; set only when a po puti co-load makes two orders share a trip.
+  deliveryTripPosition Int?          @map("delivery_trip_position")
+  // --- Seller reservation board (vehicle-first booking) ---
+  bookingKind          BookingKind?  @map("booking_kind")
+  // Ertangi booked for after 09:00: the driver sees it in the morning but
+  // cannot start it until 09:00 Tashkent.
+  startAfterNine       Boolean       @default(false) @map("start_after_nine")
+  fullBooking          Boolean       @default(false) @map("full_booking") // Polniy — locks the truck
+  isBackhaul           Boolean       @default(false) @map("is_backhaul") // po puti
+  poputiAllowed        Boolean       @default(false) @map("poputi_allowed") // "po puti mumkin"
+  // A po puti order: the minutes it added to the truck's trip when it joined,
+  // shown to the seller it rode with (owner, 10.11.2026).
+  poputiDetourSeconds  Int?          @map("poputi_detour_seconds")
+  // The first seller's limit: a po puti may add at most this many minutes for
+  // his client (15 / 30 / 45; null = the general cap). Owner, 10.11.2026.
+  poputiMaxDelayMin    Int?          @map("poputi_max_delay_min")
+  // On the first seller's order once a po puti joins (owner, 11.11.2026): the
+  // latest his client may get the goods, and when he was told it is running late.
+  poputiClientDeadlineAt DateTime?   @map("poputi_client_deadline_at")
+  poputiLateToldAt     DateTime?     @map("poputi_late_told_at")
+  cargoType            CargoType?    @relation(fields: [cargoTypeId], references: [id], onDelete: SetNull)
+  cargoTypeId          String?       @map("cargo_type_id")
+  weightKg             Int?          @map("weight_kg")
+  lengthCm             Int?          @map("length_cm")
+  widthCm              Int?          @map("width_cm")
+  heightCm             Int?          @map("height_cm")
+  overLimitAttested    Boolean       @default(false) @map("over_limit_attested")
+  waybillSource        String?       @map("waybill_source")
+  queuePosition        Int?          @map("queue_position")
+  // The stalled-lorry watch (owner, 30.10.2026): when the order became the
+  // driver's turn, how far he then was from the first pickup, and where the
+  // watch stands — watching, warned (10 min), moved (on his way: done).
+  idleWatchSince       DateTime?     @map("idle_watch_since")
+  idleStartMetres      Float?        @map("idle_start_metres")
+  idleState            String?       @map("idle_state")
+  // A Polniy with only this order on it: when the seller was told to put the
+  // next one on (five minutes before this one ends). Once per order.
+  polniyRemindedAt     DateTime?     @map("polniy_reminded_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  items           OrderItem[]
+  pickupSources   OrderPickupSource[]
+  reservation     Reservation?
+  assignments     DriverAssignment[]
+  telegramReports TelegramReport[]
+  // Days the driver ended his shift with this order still in hand.
+  carryOvers      OrderCarryOver[]
+  notifications   Notification[]
+  incidents       Incident[]
+  bonusLogs       BonusLog[]
+  tariffEarnings  DriverTariffEarning[]
+  viloyatOvertimes ViloyatOvertime[]
+  morningStarts    MorningStart[]
+  returnItems      OrderReturnItem[]
+  vozvratReport    VozvratReport?
+  // One per place it is taken in at: warehouse and/or store (owner, 07.11.2026).
+  warehouseReturns WarehouseReturn[]
+  fines           Fine[]
+  serviceVisits   ServiceVisit[]
+
+  @@index([status])
+  @@index([assignedDriverId])
+  @@index([createdBySellerId])
+  // Read when a client address is removed and its orders are detached from it.
+  @@index([clientAddressId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String               @id @default(uuid())
+  order            Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId          String               @map("order_id")
+  productName      String               @map("product_name")
+  quantity         Int
+  pickupPlace      PickupPlace          @relation(fields: [pickupPlaceId], references: [id])
+  pickupPlaceId    String               @map("pickup_place_id")
+  pickupPlaceName  String               @map("pickup_place_name")
+  collectionStatus ItemCollectionStatus @default(pending) @map("collection_status")
+  problemReason    String?              @map("problem_reason")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  quantityAudits OrderItemQuantityAudit[]
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// A cargo pickup source on a seller-board order (1–2 per order). Replaces the
+// per-product pickup place for board orders; backs synthetic OrderItems so the
+// existing collection flow keeps working.
+model OrderPickupSource {
+  id                  String               @id @default(uuid())
+  order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId             String               @map("order_id")
+  pickupPlace         PickupPlace          @relation("SourcePlace", fields: [pickupPlaceId], references: [id])
+  pickupPlaceId       String               @map("pickup_place_id")
+  name                String
+  // Official geo (pickup zone).
+  region              Region?              @relation(fields: [regionCode], references: [code], onDelete: SetNull)
+  regionCode          String?              @map("region_code")
+  geoDistrict         GeoDistrict?         @relation(fields: [geoDistrictCode], references: [code], onDelete: SetNull)
+  geoDistrictCode     String?              @map("geo_district_code")
+  // Snapshotted from the pickup place at creation (see regionCode above).
+  lat                 Float?
+  lng                 Float?
+  // Position of this stop in the driver's merged trip (see Order.deliveryTripPosition).
+  tripPosition        Int?                 @map("trip_position")
+  position            Int                  @default(0)
+  // Driver journey leg: pending → en_route (Heading to…) → arrived (Arrived at…).
+  legStatus           LegStatus            @default(pending) @map("leg_status")
+  // Photo of the loaded goods, captured when the driver marks this stop loaded.
+  loadPhotoUrl        String?              @map("load_photo_url")
+  // Per-pickup Vozvrat state. Only stops whose goods were collected require a return.
+  returnRequired      Boolean              @default(false) @map("return_required")
+  returnDestination   String?              @map("return_destination")
+  // Ta'minotchi: which supplier's place the goods go back to, picked by the
+  // seller from the list (owner, 12.11.2026). Null: the place they came from.
+  returnPlace         PickupPlace?         @relation("ReturnPlace", fields: [returnPlaceId], references: [id], onDelete: SetNull)
+  returnPlaceId       String?              @map("return_place_id")
+  returnStage         String?              @map("return_stage")
+  returnProofPhotoUrl String?              @map("return_proof_photo_url")
+  returnedAt          DateTime?            @map("returned_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  tariffEarning       DriverTariffEarning?
+
+  @@index([orderId])
+  @@index([orderId, returnRequired])
+  @@map("order_pickup_sources")
+}
+
+// Cargo-type catalog (rasxod-style) — the "Asosiy ortiladigan yuk" dropdown.
+model CargoType {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@map("cargo_types")
+}
+
+// A seller-board hold on a vehicle (zanyat/bron). While `awaiting` the seller has
+// `fillDeadline` to fill details; on Band qilish it becomes `filled` and spawns the
+// committed Order; expiry / Zakazni Otmen mark it `expired` / `cancelled`.
+model Reservation {
+  id            String            @id @default(uuid())
+  vehicle       Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId     String            @map("vehicle_id")
+  seller        User              @relation(fields: [sellerId], references: [id])
+  sellerId      String            @map("seller_id")
+  kind          BookingKind
+  // A multi-order booking (2x / full) groups its slots; sequenceIndex is their order.
+  groupId       String?           @map("group_id")
+  mode          BookingMode       @default(single)
+  sequenceIndex Int               @default(0) @map("sequence_index")
+  fullBooking   Boolean           @default(false) @map("full_booking")
+  isBackhaul    Boolean           @default(false) @map("is_backhaul")
+  status        ReservationStatus @default(awaiting)
+  // Calendar day the booking is for (today for zanyat/bron, a future date for Ertangi).
+  scheduledDate DateTime          @default(now()) @map("scheduled_date")
+  // Ertangi: the seller said the work starts at 09:00, not first thing.
+  startAfterNine Boolean          @default(false) @map("start_after_nine")
+  // Null for future/pre-booked (Ertangi) holds — only today's holds run the fill-timer.
+  fillDeadline  DateTime?         @map("fill_deadline")
+  queuePosition Int               @default(0) @map("queue_position")
+  order         Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId       String?           @unique @map("order_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  @@index([vehicleId, status])
+  @@index([sellerId, status])
+  @@index([groupId])
+  @@map("reservations")
+}
+
+model OrderItemQuantityAudit {
+  id          String    @id @default(uuid())
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId String    @map("order_item_id")
+  oldQuantity Int       @map("old_quantity")
+  newQuantity Int       @map("new_quantity")
+  changedBy   User      @relation(fields: [changedById], references: [id])
+  changedById String    @map("changed_by")
+  changedAt   DateTime  @default(now()) @map("changed_at")
+
+  @@map("order_item_quantity_audits")
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling
+// ---------------------------------------------------------------------------
+
+model DriverAssignment {
+  id                  String           @id @default(uuid())
+  driver              Driver           @relation(fields: [driverId], references: [id])
+  driverId            String           @map("driver_id")
+  order               Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId             String           @map("order_id")
+  deliveryDatetime    DateTime         @map("delivery_datetime")
+  assignmentStatus    AssignmentStatus @default(pending_driver_response) @map("assignment_status")
+  startTime           DateTime?        @map("start_time")
+  estimatedFinishTime DateTime?        @map("estimated_finish_time")
+  createdBy           User             @relation(fields: [createdById], references: [id])
+  createdById         String           @map("created_by")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  @@index([orderId])
+  @@map("driver_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & integrations
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id              String              @id @default(uuid())
+  recipient       User                @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  recipientUserId String              @map("recipient_user_id")
+  type            String
+  title           String
+  body            String
+  channel         NotificationChannel
+  relatedOrder    Order?              @relation(fields: [relatedOrderId], references: [id])
+  relatedOrderId  String?             @map("related_order_id")
+  status          String              @default("pending")
+  readAt          DateTime?           @map("read_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  // The inbox query is "my newest 100", so recipient+time is one index lookup
+  // with no sort. The bare recipient index alone still forced a sort.
+  @@index([recipientUserId, createdAt(sort: Desc)])
+  // Retention sweeps unread rows by age.
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model TelegramReport {
+  id          String               @id @default(uuid())
+  // What the report is about: an order (delivery, vozrat, pickup), a fuel
+  // fill-up, or a service visit. Exactly one is set.
+  order          Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId        String?       @map("order_id")
+  fuelLog        FuelLog?      @relation(fields: [fuelLogId], references: [id], onDelete: Cascade)
+  fuelLogId      String?       @map("fuel_log_id")
+  serviceVisit   ServiceVisit? @relation(fields: [serviceVisitId], references: [id], onDelete: Cascade)
+  serviceVisitId String?       @map("service_visit_id")
+  photoUrl    String               @map("photo_url")
+  // Further photos posted as one album after the first (a service visit's works + receipt).
+  photoUrls   String[]             @default([]) @map("photo_urls")
+  messageText String               @map("message_text")
+  // Which chat this report targets: "delivery" (default group), "vozrat", "pickup", "fuel" or "service".
+  target      String               @default("delivery")
+  /// What this report is of, so re-running the event that produced it cannot
+  /// post the same photo twice: "order:<id>:delivery", "order:<id>:pickup:<stop>",
+  /// "fuel:<id>". Null only for rows written before this existed.
+  dedupeKey   String?              @unique @map("dedupe_key")
+  status      TelegramReportStatus @default(pending)
+  retryCount  Int                  @default(0) @map("retry_count")
+  // When the next send is due (backoff after a failure, a longer wait while
+  // the bot or the group is not configured). Null once sent or given up.
+  nextAttemptAt DateTime?          @map("next_attempt_at")
+  // Why the last attempt did not deliver, for the admin's retry screen.
+  lastError   String?              @map("last_error")
+  sentAt      DateTime?            @map("sent_at")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  // Kept plain: the admin retry screen queries status = 'failed'.
+  @@index([status])
+  @@index([status, nextAttemptAt])
+  @@map("telegram_reports")
+}
+
+/// Transactional outbox: domain events are written here in the same DB
+/// transaction as the state change, then dispatched by the worker.
+model OutboxEvent {
+  id            String    @id @default(uuid())
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id")
+  eventType     String    @map("event_type")
+  payload       Json
+  status        String    @default("pending")
+  // A failed dispatch is retried with a backoff; `failed` only after the last try.
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  processedAt   DateTime? @map("processed_at")
+
+  // Indexed by a partial index on (created_at) WHERE status = 'pending',
+  // declared in SQL because Prisma cannot express one. It replaces a plain
+  // status index: the dispatcher only ever reads pending rows, so indexing the
+  // processed ones cost size and a sort for nothing (648 kB -> 16 kB at 50k).
+  @@map("outbox_events")
+}
+
+model Vehicle {
+  id          String           @id @default(uuid())
+  plateNumber String           @unique @map("plate_number")
+  model       String
+  // Registration certificate number from the tech passport ("AAG 1234567").
+  techPassport String?          @map("tech_passport")
+  // Who it is registered to, as the tech passport names them.
+  owner       String?
+  // Year of manufacture, as the fleet sheet records it.
+  modelYear   Int?             @map("model_year")
+  // Both sides of the tech passport, for the seller who is asked to send it.
+  techPassportFrontUrl String?  @map("tech_passport_front_url")
+  techPassportBackUrl  String?  @map("tech_passport_back_url")
+  type        VehicleType      @default(other)
+  capacityKg  Int?             @map("capacity_kg")
+  status      VehicleStatus    @default(active)
+  notes       String?
+  currentKm   Int?             @map("current_km")
+  // Cargo-bay dimensions (cm) — drives the seller-board limit banner / over-limit check.
+  lengthCm    Int?             @map("length_cm")
+  widthCm     Int?             @map("width_cm")
+  heightCm    Int?             @map("height_cm")
+  // KATTA / YENGIL split on the seller board (defaults from type in the service).
+  category    VehicleCategory?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  driver        Driver?
+  kmRecords     KmRecord[]
+  documents     VehicleDocument[]
+  incidents     Incident[]
+  expenses      Expense[]
+  reservations  Reservation[]
+  companyJobs   CompanyJob[]
+  fuelLogs      FuelLog[]
+  serviceVisits ServiceVisit[]
+  serviceStates VehicleServiceState[]
+
+  @@map("vehicles")
+}
+
+// Driver-pay tariff per vehicle class (admin config). One row per VehicleCategory.
+// All amounts in UZS som. Feeds the payroll earnings computation (wired separately):
+//  - dailyWage: flat per attended day · pickup: per source · delivery: per order,
+//    each split in-city (shahar) vs outside-city (tashqari).
+model VehicleTariff {
+  category           VehicleCategory @id
+  dailyWageSom       Int             @default(0) @map("daily_wage_som")
+  pickupCitySom      Int             @default(0) @map("pickup_city_som")
+  pickupOutsideSom   Int             @default(0) @map("pickup_outside_som")
+  deliveryCitySom    Int             @default(0) @map("delivery_city_som")
+  deliveryOutsideSom Int             @default(0) @map("delivery_outside_som")
+  // Viloyat trip past the end of the work day: som per road kilometre
+  // (see drivers/viloyat-overtime.ts). Kept at or below the hourly overtime
+  // rate divided by the fastest realistic average speed.
+  overtimeKmSom      Int             @default(0) @map("overtime_km_som")
+  // Morning early start: som per hour before 09:00, paid by the minute
+  // (drivers/morning-start.service.ts). Owner, 29.10.2026: 70 000 katta/orta,
+  // 40 000 kichik.
+  earlyHourSom       Int             @default(0) @map("early_hour_som")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@map("vehicle_tariffs")
+}
+
+model Incident {
+  id           String       @id @default(uuid())
+  vehicle      Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId    String       @map("vehicle_id")
+  order        Order?       @relation(fields: [orderId], references: [id])
+  orderId      String?      @map("order_id")
+  type         IncidentType @default(other)
+  description  String?
+  occurredAt   DateTime     @map("occurred_at")
+  reportedById String?      @map("reported_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@index([vehicleId])
+  @@map("incidents")
+}
+
+model VehicleDocument {
+  id                  String         @id @default(uuid())
+  vehicle             Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId           String         @map("vehicle_id")
+  type                VehicleDocType @default(other)
+  number              String?
+  issuedAt            DateTime?      @map("issued_at")
+  expiresAt           DateTime       @map("expires_at")
+  // A photograph of the paper itself.
+  photoUrl            String?        @map("photo_url")
+  // For a power of attorney: the person it names.
+  holderName          String?        @map("holder_name")
+  notes               String?
+  // Last expiry stage ("soon"/"expired") admins were notified about; null = not yet
+  // notified (or re-armed after the expiry date was edited). Prevents daily spam.
+  expiryNotifiedStage String?        @map("expiry_notified_stage")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  @@index([vehicleId])
+  @@map("vehicle_documents")
+}
+
+model KmRecord {
+  id           String   @id @default(uuid())
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId    String   @map("vehicle_id")
+  km           Int
+  recordedById String?  @map("recorded_by")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+  // The odometer as the driver photographed it, once a week at the pump.
+  photoUrl     String?  @map("photo_url")
+  // What the vision model read off that photo and how it compared with the
+  // typed km: ok, unread (no answer / doubtful), or — for the office —
+  // skipped when there was no photo. Refused readings are never stored.
+  aiKm         Int?     @map("ai_km")
+  checkStatus  String?  @map("check_status")
+  // A driver's reading more than 10 000 km above the lorry's: kept with its
+  // photo but not taken as the lorry's km; the office checks it and enters the
+  // right one, which clears this (owner, 07.11.2026).
+  needsReview  Boolean  @default(false) @map("needs_review")
+
+  @@index([vehicleId])
+  @@map("km_records")
+}
+
+// Organization-wide work schedule config. A single row (id "default"); the service
+// upserts it. workdays holds weekday numbers 0=Sunday..6=Saturday.
+model WorkSettings {
+  id                  String   @id @default("default")
+  expectedHoursPerDay Int      @default(8) @map("expected_hours_per_day")
+  workdays            Int[]    @default([1, 2, 3, 4, 5, 6]) @map("workdays")
+  shiftStart          String   @default("09:00") @map("shift_start")
+  shiftEnd            String   @default("18:00") @map("shift_end")
+  // Minutes past the shift start still counted as on time.
+  lateGraceMinutes    Int      @default(10) @map("late_grace_minutes")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("work_settings")
+}
+
+// One weekday of a work schedule. `driverId` null = the organisation default;
+// a driver row overrides the org row for that weekday. Missing weekdays fall
+// back to WorkSettings (workdays + shiftStart/shiftEnd).
+//
+// Uniqueness is enforced by two partial indexes (org rows keyed on weekday,
+// driver rows on driver+weekday) — a plain composite unique would not work,
+// since SQL treats NULL driver_id values as distinct.
+model WorkSchedule {
+  id        String  @id @default(uuid())
+  driver    Driver? @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId  String? @map("driver_id")
+  weekday   Int // 0 = Sunday .. 6 = Saturday
+  isDayOff  Boolean @default(false) @map("is_day_off")
+  startTime String  @map("start_time")
+  endTime   String  @map("end_time")
+
+  @@index([driverId])
+  @@map("work_schedules")
+}
+
+// ---------------------------------------------------------------------------
+// Fuel logging. One row per fill-up: the photo of the dispenser, where the
+// truck was when it was taken, what was read off the display, and which
+// account the fill belongs to. See packages/shared/src/schemas/fuel.ts.
+// ---------------------------------------------------------------------------
+
+enum FuelType {
+  gaz
+  benzin
+  propan
+}
+
+enum FuelLogStatus {
+  draft // photo landed; numbers not yet confirmed by the driver
+  confirmed
+}
+
+enum FuelLogOutcome {
+  matched // inside the fence of the station the driver picked
+  other_station // inside a different contracted station's fence; pick corrected
+  unlisted // inside no fence, or no station picked — the driver paid
+  mismatch // picked a contracted station, was inside no fence — needs a look
+  unverified // no usable position at all
+}
+
+enum FuelSettlement {
+  station_invoice
+  driver_reimbursement
+}
+
+model FuelStation {
+  id         String     @id @default(uuid())
+  name       String
+  brand      String?
+  address    String?
+  // The fence centre. Optional: a station known only by name can still be
+  // picked from the list, it just cannot be matched or navigated to.
+  lat        Float?
+  lng        Float?
+  fuelTypes  FuelType[] @map("fuel_types")
+  contracted Boolean    @default(true)
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  selectedIn FuelLog[] @relation("FuelLogSelectedStation")
+  resolvedIn FuelLog[] @relation("FuelLogResolvedStation")
+
+  @@index([active, contracted])
+  @@map("fuel_stations")
+}
+
+model FuelLog {
+  id        String        @id @default(uuid())
+  status    FuelLogStatus @default(draft)
+  driver    Driver        @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId  String        @map("driver_id")
+  // Snapshot of the driver's vehicle at the time; reassignments must not rewrite history.
+  vehicle   Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  vehicleId String?       @map("vehicle_id")
+  fuelType  FuelType      @map("fuel_type")
+  photoUrl  String        @map("photo_url")
+
+  // What the driver tapped, and what the fence found. Usually the same row.
+  selectedStation   FuelStation? @relation("FuelLogSelectedStation", fields: [selectedStationId], references: [id], onDelete: SetNull)
+  selectedStationId String?      @map("selected_station_id")
+  resolvedStation   FuelStation? @relation("FuelLogResolvedStation", fields: [resolvedStationId], references: [id], onDelete: SetNull)
+  resolvedStationId String?      @map("resolved_station_id")
+
+  // The phone's fix when the shutter was pressed.
+  capturedAt       DateTime  @map("captured_at")
+  captureLat       Float?    @map("capture_lat")
+  captureLng       Float?    @map("capture_lng")
+  captureAccuracyM Float?    @map("capture_accuracy_m")
+  // Where the app's normal tracking last put the driver — the second opinion.
+  trackedLat       Float?    @map("tracked_lat")
+  trackedLng       Float?    @map("tracked_lng")
+  trackedAt        DateTime? @map("tracked_at")
+  // Metres: capture → resolved station, and capture → tracked position.
+  distanceM        Float?    @map("distance_m")
+  trackingGapM     Float?    @map("tracking_gap_m")
+
+  outcome FuelLogOutcome
+  flags   String[]
+
+  // Read off the photo by the AI. Null until that exists (Phase 3).
+  extractedTotalSum     Float?    @map("extracted_total_sum")
+  extractedQuantity     Float?    @map("extracted_quantity")
+  extractedUnitPriceSum Float?    @map("extracted_unit_price_sum")
+  extractedReadable     Boolean?  @map("extracted_readable")
+  /// How sure the reading is, 0-100, as the model itself reports it. Under 60
+  /// the driver is asked for a better photograph; under 80 he is expected to
+  /// correct it; above that it stands as read.
+  extractedConfidence   Int?      @map("extracted_confidence")
+  // Why it could not be read (blur, glare, cropped, not a dispenser), and
+  // which unit the display itself showed — a gaz fill whose display says
+  // litres is worth a look.
+  extractedReason       String?   @map("extracted_reason")
+  extractedUnit         String?   @map("extracted_unit")
+  // Confirmed by the driver. Kept apart from the extraction on purpose: the
+  // difference between the two is how the AI gets judged, and how a
+  // correction that always goes one way gets noticed.
+  totalSum              Float?    @map("total_sum")
+  quantity              Float?
+  unitPriceSum          Float?    @map("unit_price_sum")
+  confirmedAt           DateTime? @map("confirmed_at")
+
+  // An admin corrected the numbers: what the driver had entered, who changed
+  // it, when. The confirmed columns above then hold the corrected values.
+  originalTotalSum     Float?    @map("original_total_sum")
+  originalQuantity     Float?    @map("original_quantity")
+  originalUnitPriceSum Float?    @map("original_unit_price_sum")
+  reviewedBy           User?     @relation("FuelLogReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedById         String?   @map("reviewed_by_id")
+  reviewedAt           DateTime? @map("reviewed_at")
+
+  // Who pays, and whether they have. Set from the admin panel.
+  settlement FuelSettlement?
+  settledAt  DateTime?       @map("settled_at")
+
+  telegramReports TelegramReport[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([driverId, capturedAt])
+  @@index([status])
+  @@index([outcome])
+  @@index([resolvedStationId, capturedAt])
+  @@map("fuel_logs")
+  expense Expense?
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle service. Works with km intervals, where each vehicle stands on each
+// work, visits (planned by mileage, requested, assigned, or on the spot) with
+// a photo per work, the odometer and the cost, and the reminders sent.
+// See packages/shared/src/schemas/service.ts.
+// ---------------------------------------------------------------------------
+
+enum ServiceVisitOrigin {
+  mileage
+  emergency
+  request
+  assigned
+}
+
+enum ServiceVisitStatus {
+  requested
+  approved
+  declined
+  in_progress
+  completed
+  cancelled
+}
+
+enum ServiceReminderKind {
+  due_soon
+  overdue
+  repeat
+}
+
+model ServiceReason {
+  id                String   @id @default(uuid())
+  name              String
+  // Null: no schedule — pickable, never due.
+  intervalKm        Int?     @map("interval_km")
+  active            Boolean  @default(true)
+  // A driver typed it in. Sits outside the catalogue until admin promotes it.
+  approved          Boolean  @default(true)
+  createdByDriver   Driver?  @relation(fields: [createdByDriverId], references: [id], onDelete: SetNull)
+  createdByDriverId String?  @map("created_by_driver_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  items     ServiceVisitItem[]
+  states    VehicleServiceState[]
+  reminders ServiceReminder[]
+
+  @@index([active, approved])
+  @@map("service_reasons")
+}
+
+model ServiceCenter {
+  id         String   @id @default(uuid())
+  name       String
+  brand      String?
+  address    String?
+  lat        Float?
+  lng        Float?
+  contracted Boolean  @default(true)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  selectedIn ServiceVisit[] @relation("ServiceVisitSelectedCenter")
+  resolvedIn ServiceVisit[] @relation("ServiceVisitResolvedCenter")
+
+  @@index([active, contracted])
+  @@map("service_centers")
+}
+
+// Where a vehicle's schedule stands for one work: the km at which it was last
+// done. Due = lastDoneKm + the work's interval. Written by a completed visit,
+// or set by admin as a baseline for a truck whose history predates the app.
+model VehicleServiceState {
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId   String        @map("vehicle_id")
+  reason      ServiceReason @relation(fields: [reasonId], references: [id], onDelete: Cascade)
+  reasonId    String        @map("reason_id")
+  lastDoneKm  Int           @map("last_done_km")
+  lastDoneAt  DateTime      @map("last_done_at")
+  lastVisit   ServiceVisit? @relation(fields: [lastVisitId], references: [id], onDelete: SetNull)
+  lastVisitId String?       @map("last_visit_id")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@id([vehicleId, reasonId])
+  @@map("vehicle_service_states")
+}
+
+model ServiceVisit {
+  id        String             @id @default(uuid())
+  status    ServiceVisitStatus @default(requested)
+  origin    ServiceVisitOrigin
+  vehicle   Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId String             @map("vehicle_id")
+  // The driver at the time. Admin-assigned visits take the vehicle's driver.
+  driver    Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId  String?            @map("driver_id")
+
+  scheduledAt DateTime? @map("scheduled_at")
+  note        String?
+  // An emergency in the middle of a delivery names it. Nothing else happens
+  // to the order — by decision, for now.
+  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId     String?   @map("order_id")
+
+  requestedAt   DateTime  @default(now()) @map("requested_at")
+  decidedBy     User?     @relation("ServiceVisitDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedById   String?   @map("decided_by_id")
+  decidedAt     DateTime? @map("decided_at")
+  declineReason String?   @map("decline_reason")
+  assignedBy    User?     @relation("ServiceVisitAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedById  String?   @map("assigned_by_id")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+
+  // Where the truck was when the driver said "I have arrived" — the fuel
+  // log's fence check, verbatim.
+  selectedCenter   ServiceCenter?  @relation("ServiceVisitSelectedCenter", fields: [selectedCenterId], references: [id], onDelete: SetNull)
+  selectedCenterId String?         @map("selected_center_id")
+  resolvedCenter   ServiceCenter?  @relation("ServiceVisitResolvedCenter", fields: [resolvedCenterId], references: [id], onDelete: SetNull)
+  resolvedCenterId String?         @map("resolved_center_id")
+  capturedAt       DateTime?       @map("captured_at")
+  captureLat       Float?          @map("capture_lat")
+  captureLng       Float?          @map("capture_lng")
+  captureAccuracyM Float?          @map("capture_accuracy_m")
+  trackedLat       Float?          @map("tracked_lat")
+  trackedLng       Float?          @map("tracked_lng")
+  trackedAt        DateTime?       @map("tracked_at")
+  distanceM        Float?          @map("distance_m")
+  trackingGapM     Float?          @map("tracking_gap_m")
+  outcome          FuelLogOutcome?
+  flags            String[]
+
+  // What it cost. The total is typed; the receipt is a photo or an explicit
+  // "there was none".
+  odometerKm       Int?      @map("odometer_km")
+  totalSum         Float?    @map("total_sum")
+  originalTotalSum Float?    @map("original_total_sum")
+  receiptPhotoUrl  String?   @map("receipt_photo_url")
+  // The total the AI read off the receipt photo (owner, 11.11.2026); null when unread.
+  receiptReadSum   Float?    @map("receipt_read_sum")
+  // What the driver wanted to say when closing the visit ("eski qism ustada qoldi").
+  driverComment    String?   @map("driver_comment")
+  noReceipt        Boolean   @default(false) @map("no_receipt")
+  reviewedBy       User?     @relation("ServiceVisitReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedById     String?   @map("reviewed_by_id")
+  reviewedAt       DateTime? @map("reviewed_at")
+
+  settlement FuelSettlement?
+  settledAt  DateTime?       @map("settled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items     ServiceVisitItem[]
+  telegramReports TelegramReport[]
+  statesSet VehicleServiceState[]
+
+  @@index([vehicleId, status])
+  @@index([driverId, status])
+  @@index([status])
+  @@index([completedAt])
+  @@map("service_visits")
+  expense Expense?
+}
+
+model ServiceVisitItem {
+  id       String         @id @default(uuid())
+  visit    ServiceVisit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visitId  String         @map("visit_id")
+  // A catalogue work, or a name typed in on the spot.
+  reason   ServiceReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+  reasonId String?        @map("reason_id")
+  name     String
+  photoUrl String?        @map("photo_url")
+  // Two photos per work (owner, 11.11.2026); photoUrl stays the first of them.
+  photoUrls String[]      @default([]) @map("photo_urls")
+  costSum  Float?         @map("cost_sum")
+  // km left to its due point when it was done (owner, 06.11.2026): positive —
+  // came early and could have driven that much more; negative — that much late.
+  remainingKmAtVisit Int? @map("remaining_km_at_visit")
+  position Int            @default(0)
+
+  @@index([visitId])
+  @@map("service_visit_items")
+}
+
+// Every reminder sent, so the rule (once due-soon, once overdue, then weekly)
+// can be enforced and admin can see how many times a driver was told.
+model ServiceReminder {
+  id        String              @id @default(uuid())
+  vehicleId String              @map("vehicle_id")
+  reason    ServiceReason       @relation(fields: [reasonId], references: [id], onDelete: Cascade)
+  reasonId  String              @map("reason_id")
+  kind      ServiceReminderKind
+  kmAtSend  Int?                @map("km_at_send")
+  // The service cycle this reminder belongs to: the km the work was last done
+  // at when it was sent (null = never done). Completing the service moves the
+  // cycle on, and the next "due soon" is sent again instead of being taken
+  // for one already sent in the previous cycle.
+  cycleKm   Int?                @map("cycle_km")
+  sentAt    DateTime            @default(now()) @map("sent_at")
+
+  @@index([vehicleId, reasonId, sentAt])
+  @@map("service_reminders")
+}
+
+// A driver ended his shift with this order still in hand and said "not today":
+// the reason he pressed, his comment, and the shift it happened on. One row
+// per order per time — an order put off twice has two.
+model OrderCarryOver {
+  id        String   @id @default(uuid())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String   @map("order_id")
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId  String   @map("driver_id")
+  workLog   WorkLog  @relation(fields: [workLogId], references: [id], onDelete: Cascade)
+  workLogId String   @map("work_log_id")
+  // customer_not_ready | customer_unreachable | cargo_not_ready | vehicle_problem | out_of_time | other
+  reason    String
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([workLogId])
+  @@map("order_carry_overs")
+}
+
+// Which running backend does the background work (common/worker-lease.ts):
+// during a deploy two are up for a moment, and only the lease holder ticks.
+model WorkerLease {
+  id        String   @id
+  holder    String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@map("worker_lease")
+}
+
+/// What a phone sends when the app crashes or its start never finishes
+/// (owner, 05.11.2026): kept here, since the container log goes with every deploy.
+model ClientReport {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  fatal     Boolean  @default(false)
+  version   String?
+  update    String?
+  at        String?
+  message   String
+  stack     String?
+
+  @@index([createdAt])
+  @@map("client_reports")
+}
+
+// Every break, as it went (owner, 12.11.2026): when it began, the end he set,
+// each extension with its reason, and when he was back — for the admin and the
+// dispatcher. The driver row keeps only the break running now.
+model DriverBreak {
+  id           String    @id @default(uuid())
+  driver       Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String    @map("driver_id")
+  workLog      WorkLog?  @relation(fields: [workLogId], references: [id], onDelete: SetNull)
+  workLogId    String?   @map("work_log_id")
+  startedAt    DateTime  @map("started_at")
+  // The end as he first set it; the current end is the last extension's.
+  plannedUntil DateTime  @map("planned_until")
+  until        DateTime
+  reason       String?
+  // [{ at, from, to, reason }], in order.
+  extensions   Json      @default("[]")
+  // Back at work (by hand, an order, the shift's end). Null while not ended.
+  endedAt      DateTime? @map("ended_at")
+  // The "it is ending" reminder went for this end (so a new end is reminded again).
+  remindedFor  DateTime? @map("reminded_for")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([driverId, startedAt])
+  @@index([workLogId])
+  @@map("driver_breaks")
+}
+
+// "Ishxona ishi bilan" (owner, 12.11.2026): an admin or the dispatcher takes a
+// lorry for the company's own errands — what for, and about how long. The lorry
+// is busy until then (or until ended early); its driver is told.
+model CompanyJob {
+  id            String    @id @default(uuid())
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId     String    @map("vehicle_id")
+  driverId      String?   @map("driver_id")
+  // "Nima ish bilan?": one line per errand, in order.
+  tasks         String[]
+  minutes       Int
+  startedAt     DateTime  @default(now()) @map("started_at")
+  until         DateTime
+  endedAt       DateTime? @map("ended_at")
+  createdById   String    @map("created_by")
+  createdByName String    @map("created_by_name")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([vehicleId, until])
+  @@map("company_jobs")
+}
+
+// The list "Nima ish bilan?" is picked from (owner, 12.11.2026): the office adds
+// and removes its entries; a job keeps the words it was sent with.
+model CompanyJobOption {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("company_job_options")
+}

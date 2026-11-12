@@ -1,0 +1,213 @@
+# Production stack for BIGANT Logistics.
+#
+#   cd logistics
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#
+# Redis is deliberately absent: nothing in the codebase talks to it. It is the
+# piece to add if the realtime layer ever needs to span more than one backend
+# instance.
+#
+# One backend instance only. RealtimeService broadcasts through an in-process
+# rxjs Subject, so a second instance would serve SSE clients that never receive
+# events published by the first — and the polling fallback was removed.
+
+name: bigant
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Enables checksums on initdb — cheap, and turning it on later means a dump
+      # and restore.
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    # No `ports:` on purpose. The database is reachable only over the compose
+    # network; publishing 5432 would expose it to the internet on a box whose
+    # firewall is the only thing in the way.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: ['postgres', '-c', 'config_file=/etc/postgresql/postgresql.conf']
+    # Docker keeps container logs for ever by default; on this box that is the
+    # disk filling up quietly. Same rotation as the geo stack.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900s}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      # Unset is correct here: the dashboard is same-origin behind nginx and the
+      # mobile app is native, so no browser ever makes a cross-origin call.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      PHOTON_URL: ${PHOTON_URL:-http://photon:2322}
+      PHOTON_TIMEOUT_MS: ${PHOTON_TIMEOUT_MS:-5000}
+      VALHALLA_URL: ${VALHALLA_URL:-http://valhalla:8002}
+      VALHALLA_TIMEOUT_MS: ${VALHALLA_TIMEOUT_MS:-10000}
+      WORKER_ENABLED: ${WORKER_ENABLED:-true}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-2000}
+      # How often an unanswered assignment is swept, and how long a driver's
+      # position trail is kept. Defaults match the code.
+      ASSIGNMENT_TIMEOUT_POLL_INTERVAL_MS: ${ASSIGNMENT_TIMEOUT_POLL_INTERVAL_MS:-60000}
+      TRACK_RETENTION_DAYS: ${TRACK_RETENTION_DAYS:-31}
+      DOCUMENT_EXPIRY_CHECK_INTERVAL_MS: ${DOCUMENT_EXPIRY_CHECK_INTERVAL_MS:-21600000}
+      SCHEDULE_CONFLICT_WINDOW_MINUTES: ${SCHEDULE_CONFLICT_WINDOW_MINUTES:-90}
+      ASSIGNMENT_TIMEOUT_MINUTES: ${ASSIGNMENT_TIMEOUT_MINUTES:-10}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_GROUP_CHAT_ID: ${TELEGRAM_GROUP_CHAT_ID:-}
+      TELEGRAM_VOZRAT_GROUP_ID: ${TELEGRAM_VOZRAT_GROUP_ID:-}
+      TELEGRAM_PICKUP_GROUP_ID: ${TELEGRAM_PICKUP_GROUP_ID:-}
+      TELEGRAM_FUEL_GROUP_ID: ${TELEGRAM_FUEL_GROUP_ID:-}
+      TELEGRAM_SERVICE_GROUP_ID: ${TELEGRAM_SERVICE_GROUP_ID:-}
+      # The office's alerts (driver app gone quiet on shift); empty = TELEGRAM_GROUP_CHAT_ID.
+      TELEGRAM_OPS_CHAT_ID: ${TELEGRAM_OPS_CHAT_ID:-}
+      # Photos on disk: written here, served by nginx at https://$DOMAIN/media.
+      MEDIA_DIR: /srv/media
+      MEDIA_PUBLIC_URL: https://${DOMAIN}/media
+      # Object storage instead of this server's disk, for when the photos
+      # outgrow it. All empty = photos stay in MEDIA_DIR.
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+      S3_BUCKET: ${S3_BUCKET:-bigant}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_WATERMARK_ID: ${CLOUDINARY_WATERMARK_ID:-}
+      # Fuel log: reading the dispenser photo. Empty key = drivers type the numbers.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4.1-mini}
+      # Google Gemini: free tier, used when OPENAI_API_KEY is empty.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_MAPS_BROWSER_KEY: ${GOOGLE_MAPS_BROWSER_KEY:-}
+      ESRI_API_KEY: ${ESRI_API_KEY:-}
+      IDLE_WATCH_ENABLED: ${IDLE_WATCH_ENABLED:-false}
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.5-flash-lite}
+      FUEL_AI_TIMEOUT_MS: ${FUEL_AI_TIMEOUT_MS:-30000}
+      # 'off' while the fleet is tested from the office (see .env.prod).
+      FUEL_FENCE_CHECK: ${FUEL_FENCE_CHECK:-on}
+      # Omborchi: the mini app's bot signs the storekeepers in and messages them.
+      VOZVRAT_BOT_TOKEN: ${VOZVRAT_BOT_TOKEN:-}
+      PUBLIC_DOMAIN: ${DOMAIN:-logistics.example.com}
+      # Driver app updates reach these user ids first (tools/promote-update.sh then sends to all).
+      OTA_TESTER_USER_IDS: ${OTA_TESTER_USER_IDS:-}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      # iPhone push (APNs). Empty = off; Android push is not affected.
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.bigant.driver}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-true}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-}
+      SEED_ADMIN_PHONE: ${SEED_ADMIN_PHONE:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    volumes:
+      # Credential files, not env vars. The Firebase service account holds a
+      # private key, and an env var is readable through `docker inspect` and
+      # /proc/<pid>/environ; a 0600 file mounted read-only is not.
+      #
+      # A directory is mounted rather than the file itself on purpose: Docker
+      # creates a *directory* in place of a missing bind-mount source, so
+      # mounting a single absent file would silently break the container for
+      # anyone not using push. With a directory, a missing file just leaves
+      # push disabled and says so in the log.
+      - ${SECRETS_DIR:-/etc/bigant/secrets}:/run/secrets:ro
+      # Proof photos. A host directory rather than a named volume so the backup
+      # script can rsync it off the box alongside the database dump.
+      - ${MEDIA_DIR:-/var/lib/bigant/media}:/srv/media
+    # Also not published. nginx reaches it over the compose network; exposing
+    # 3000 on the host would bypass TLS and Cloudflare entirely.
+    # Docker keeps container logs for ever by default; on this box that is the
+    # disk filling up quietly. Same rotation as the geo stack.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+    healthcheck:
+      # Exec form with single-quoted JS: node:20-slim ships neither curl nor wget,
+      # and this avoids a layer of shell escaping.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Compiled into the bundle. Same-origin, so no CORS and the SSE token
+        # never leaves the host.
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ${CERT_DIR:-./certs}:/etc/nginx/certs:ro
+      # The map basemap. Generated once with planetiler from the OSM extract
+      # (see deploy/README.md) and served as a static file.
+      - ${TILES_DIR:-/opt/bigant-geo/tiles}:/srv/tiles:ro
+      # Proof photos written by the API, served read-only at /media/.
+      - ${MEDIA_DIR:-/var/lib/bigant/media}:/srv/media:ro
+      # The driver app's over-the-air updates: a bundle per publish and a
+      # `current` symlink to the one being served.
+      - ${UPDATES_DIR:-/var/lib/bigant/updates}:/srv/updates:ro
+    # Docker keeps container logs for ever by default; on this box that is the
+    # disk filling up quietly. Same rotation as the geo stack.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    healthcheck:
+      # /healthz is the one path on port 80 that is not a redirect, and
+      # busybox wget is what the nginx alpine image has.
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://127.0.0.1/healthz']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pgdata:

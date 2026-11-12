@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "BIGANT Driver",
+    "slug": "bigant-driver",
+    "version": "1.4.3",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#14181f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bigant.driver",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Yuk, yetkazish, odometr va yoqilg'i rasmlari uchun.",
+        "NSPhotoLibraryUsageDescription": "Rasm tanlash uchun.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      }
+    },
+    "android": {
+      "package": "com.bigant.driver",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "versionCode": 42,
+      "googleServicesFile": "./google-services.json"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://logistics.example.com/updates/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": "2",
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "plugins": [
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Ish vaqtida joylashuvingiz ilova yopiq bo'lsa ham ofisga ko'rinadi. Ishni tugatgach yuborilmaydi.",
+          "isIosBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "Ish vaqtida joylashuvingiz ofisga ko'rinadi."
+        }
+      ],
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      "./plugins/withReleaseSigning"
+    ]
+  }
+}

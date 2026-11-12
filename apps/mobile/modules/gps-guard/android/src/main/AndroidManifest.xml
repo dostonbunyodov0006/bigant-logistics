@@ -1,0 +1,38 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- "Boshqa ilovalar ustidan": the red GPS screen comes up over the home screen. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- "Без ограничений": Android does not hold back the app's position or network to save battery. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <!-- The shift's own location service (owner, 05.11.2026). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <!-- The red screen shakes the phone (owner, 07.11.2026). -->
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- The phone came back on: the shift's location service starts again (owner, 06.11.2026). -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <application>
+    <service
+      android:name="expo.modules.gpsguard.BigantLocationService"
+      android:exported="false"
+      android:foregroundServiceType="location" />
+    <!-- "GPS NI YOQISH": hosts Google's one-tap "turn on location" sheet, invisibly (owner, 12.11.2026). -->
+    <activity
+      android:name="expo.modules.gpsguard.EnableLocationActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:taskAffinity=""
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    <receiver
+      android:name="expo.modules.gpsguard.BootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

@@ -1,0 +1,35 @@
+{
+  "name": "bigant-logistics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BIGANT Internal Logistics Automation System (modular monolith)",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev": "turbo run dev",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "eslint": "^9.14.0",
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.13.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "proxy-addr": "2.0.8",
+      "body-parser@1": "1.20.9",
+      "qs@6": "^6.17.1",
+      "multer@2": "2.5.0"
+    }
+  }
+}

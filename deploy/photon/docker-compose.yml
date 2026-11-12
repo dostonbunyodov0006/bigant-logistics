@@ -1,0 +1,104 @@
+name: bigant-geo
+
+services:
+  photon:
+    image: bigant-photon:1.3.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    hostname: photon
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Xms1g -Xmx4g
+        -XX:+ExitOnOutOfMemoryError
+        -XX:MaxDirectMemorySize=1g
+    command:
+      - java
+      - -jar
+      - /opt/photon/photon.jar
+      - serve
+      - -data-dir
+      - /data
+      - -listen-ip
+      - 0.0.0.0
+      - -listen-port
+      - "2322"
+      - -default-language
+      - uz
+      - -max-results
+      - "10"
+      - -max-reverse-results
+      - "10"
+      - -query-timeout
+      - "5"
+      - -metrics-enable
+      - prometheus
+    volumes:
+      - ${PHOTON_DATA_DIR:-/opt/bigant-geo/photon/data-current}:/data
+    networks:
+      bigant:
+        aliases:
+          - photon
+    mem_limit: 6g
+    cpus: 2.0
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:2322/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  photon-import:
+    profiles:
+      - tools
+    image: bigant-photon:1.3.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    hostname: photon-import
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Xms1g -Xmx6g
+        -XX:+ExitOnOutOfMemoryError
+        -XX:MaxDirectMemorySize=1g
+      PHOTON_IMPORT_FILE: /imports/${PHOTON_IMPORT_FILE:-photon-dump-central-asia-release-260906.jsonl.zst}
+      PHOTON_IMPORT_THREADS: ${PHOTON_IMPORT_THREADS:-1}
+    command:
+      - /opt/photon/import.sh
+    volumes:
+      - ${PHOTON_DATA_DIR:-/opt/bigant-geo/photon/data-current}:/data
+      - ${PHOTON_IMPORTS_DIR:-/opt/bigant-geo/photon/imports}:/imports:ro
+    network_mode: none
+    mem_limit: 8g
+    cpus: 4.0
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+networks:
+  bigant:
+    external: true
+    name: ${BIGANT_NETWORK:-bigant_default}

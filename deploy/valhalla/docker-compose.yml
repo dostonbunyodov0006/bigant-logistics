@@ -1,0 +1,51 @@
+name: bigant-valhalla
+
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:3.8.3-amd64@sha256:600caefda81d6ef8e6e85fa0493213cf1723cff3665a04da592f6898d931c31f
+    restart: unless-stopped
+    hostname: valhalla
+    user: "10001:10001"
+    environment:
+      server_threads: "2"
+      serve_tiles: "True"
+      use_tiles_ignore_pbf: "True"
+      force_rebuild: "False"
+      build_tar: "True"
+      build_admins: "True"
+      build_time_zones: "True"
+      build_elevation: "False"
+      build_transit: "False"
+      use_default_speeds_config: "False"
+      update_existing_config: "False"
+    volumes:
+      - ${VALHALLA_DATA_DIR:-/opt/bigant-geo/valhalla/data-current}:/custom_files
+    networks:
+      bigant:
+        aliases:
+          - valhalla
+    mem_limit: 8g
+    cpus: 2.0
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 20m
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+networks:
+  bigant:
+    external: true
+    name: ${BIGANT_NETWORK:-bigant_default}
